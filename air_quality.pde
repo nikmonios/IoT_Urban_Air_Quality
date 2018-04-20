@@ -1,79 +1,102 @@
 /*
     example woth board no.1.
 
-    This board has the NO2, CO2, CO, and Temperature-Pressure-Humidity sensors on it.
+    This board has the NO2 and the Luminosity sensors on it.
 
-    Read sensors and print them to Serial Screen Periodically
+    Read sensors and print them to Serial Screen
 */
 
 #include <WaspSensorGas_v30.h>
 #include <WaspFrame.h>
 #include <WaspXBeeZB.h>
-#include "includes.h"
+#include "coefficients.h"
+
+#define PDEBUG 1    /* enable serial print for debug reasons */
 
 void setup()
 {
-  // Configure the USB port
-  USB.ON();
+  #ifdef PDEBUG
+  USB.ON();   /* configure the USB port */
   USB.println(F("Board is starting..."));
+  #endif
 
-  // Calculate the slope and the intersection of the logarithmic function
-  CO2Sensor.setCalibrationPoints(CO2voltages, CO2concentrations, numPoints);
-  // Calculate the slope and the intersection of the logarithmic function
-  COSensor.setCalibrationPoints(COres, COconcentrations, numPoints);
-  // Calculate the slope and the intersection of the logarithmic function
-  NO2Sensor.setCalibrationPoints(NO2res, NO2concentrations, numPoints);
+  
+  /* Calculate the slope and the intersection of the logarithmic functions */
+  CO2Sensor.setCalibrationPoints(CO2voltages, CO2concentrations, numPoints);   /* for CO2 sensor */
+  COSensor.setCalibrationPoints(COres, COconcentrations, numPoints);           /* for CO  sensor */
+  NO2Sensor.setCalibrationPoints(NO2res, NO2concentrations, numPoints);        /* for NO2 sensor */
 
-  // Set the Waspmote ID
+  /* Set the Waspmote ID */
   frame.setID(node_ID);
 
-  RTC.ON(); //
+  /* Enable Real Time Clock */
+  RTC.ON();
 
+  /* Check if there is a Meshlium nearby */
   error = xbeeZB.setRTCfromMeshlium(MESHLIUM_ADDRESS);
-  if ( error == 0) //if we have the time from the Meshlium
+  
+  if ( error == 0) /* if we have a Meshlium nearby */
   {
-    //add timestamp from RTC
+    /* set real time and date as taken from the Meshlium */
     RTC.getTime();
     delay(10);
+    
+    #ifdef PDEBUG
     USB.println("took real time and date from Meshlium");
+    #endif
   }
-  
+
+  #ifdef PDEBUG
   USB.println("starting application now");
+  #endif
 }
 
 
 void loop()
 {
-  PWR.sleep(WTD_4S, ALL_OFF); //sleep for 4 seconds, kill all sensors and boards
+  PWR.sleep(WTD_4S, ALL_OFF); /* sleep for 4 seconds, kill all sensors and boards */
+
+  #ifdef PDEBUG
   USB.ON();
-  if( intFlag & WTD_INT )
+  #endif
   
+  if( intFlag & WTD_INT ) /* when the 4 seconds of sleep pass, wake up */
   {
+    #ifdef PDEBUG
     USB.println(F("---------------------"));
     USB.println(F("WTD INT captured"));
     USB.println(F("---------------------"));
-    intFlag &= ~(WTD_INT); //when you wake up, clean the flag
+    #endif
+    
+    intFlag &= ~(WTD_INT); /* when you wake up, clean the flag */
   }
 
-  timer_unit += 1; //update the timer unit every time you wake up
+  timer_unit += 1;  /* update the timer unit every time you wake up */
 
-  if (timer_unit == 3) // have we got 3 4_Sec interrupts (12 secs)?
+  if (timer_unit == 3) /* have we got 3 4_Sec interrupts (12 secs)? */
   {
-    timer_unit = 0; //reset the timer unit
+    timer_unit = 0; /* reset the timer unit */
 
-    // init XBee
+    /* init XBee */
     xbeeZB.ON();
 
-    //and take measurements
+    /* and enable sensors */
     Gases.ON();
     COSensor.ON();
     CO2Sensor.ON();
     NO2Sensor.ON();
     delay(100);
-  
-    Read_Sensors();       /**** READ SENSORS ****/
-    Print_Sensors_Values(); /**** PRINT OF THE RESULTS ****/
-    Create_Ascii();        /**** CREATE ASCII FRAME ****/
+
+    /**** READ SENSORS ****/
+    Read_Sensors();
+
+    #ifdef PDEBUG /* only print to serial if the debug mode is set */
+    /**** PRINT OF THE RESULTS ****/
+    Print_Sensors_Values();
+    #endif
+
+    /**** CREATE ASCII FRAME ****/
+    Create_Ascii();
   }
 }
 
@@ -93,7 +116,7 @@ void Read_Sensors()
   /**********************************************/
   
   /*                READ CO                       */
-  COPPM = COSensor.readConcentration(); // PPM value of CO
+  COPPM = COSensor.readConcentration();
   /***********************************************/
   
   /*                READ CO2                      */
@@ -134,32 +157,32 @@ void Print_Sensors_Values()
 
 void Create_Ascii()
 {
-  //first see if we have achieved communication with Meshlium
+  /* first see if we have achieved communication with Meshlium */
   error = xbeeZB.setRTCfromMeshlium(MESHLIUM_ADDRESS);
 
-  // Create new frame (ASCII)
+  /* Create new frame (ASCII) */
   frame.createFrame(ASCII, node_ID);
-  // Add temperature
+  /* Add temperature */
   frame.addSensor(SENSOR_GASES_TC, temperature);
-  // Add humidity
+  /* Add humidity */
   frame.addSensor(SENSOR_GASES_HUM, humidity);
-  // Add pressure
+  /* Add pressure */
   frame.addSensor(SENSOR_GASES_PRES, pressure);
-  // Add CO2 PPM value
+  /* Add CO2 PPM value */
   frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
-  // Add CO PPM value
+  /* Add CO PPM value */
   frame.addSensor(SENSOR_GASES_CO, COPPM);
-  // Add CO PPM value
+  /* Add CO PPM value */
   frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
 
-  if ( error == 0) //if we have the time from the Meshlium
+  if ( error == 0) /* if we have the time from the Meshlium */
   {
-    //add timestamp from RTC
+    /* add timestamp from RTC */
     RTC.getTime();
     delay(10);
     frame.addTimestamp();
   }
-  // Show the frame
+  /* Show the frame */
   frame.showFrame();
 
   /* reset values */
@@ -170,4 +193,3 @@ void Create_Ascii()
   COPPM = 0;
   NO2PPM = 0;
 }
-
