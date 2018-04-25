@@ -12,6 +12,7 @@
 #include "coefficients.h"
 
 #define PDEBUG 1    /* enable serial print for debug reasons */
+/*#define MODE2  1*/    /* mode 2, when enabled, will read all sensors */ 
 
 void setup()
 {
@@ -22,9 +23,12 @@ void setup()
 
   
   /* Calculate the slope and the intersection of the logarithmic functions */
-  CO2Sensor.setCalibrationPoints(CO2voltages, CO2concentrations, numPoints);   /* for CO2 sensor */
   COSensor.setCalibrationPoints(COres, COconcentrations, numPoints);           /* for CO  sensor */
+  
+  #ifdef MODE2 /* if we work on full demo, load other sensors */
+  CO2Sensor.setCalibrationPoints(CO2voltages, CO2concentrations, numPoints);   /* for CO2 sensor */
   NO2Sensor.setCalibrationPoints(NO2res, NO2concentrations, numPoints);        /* for NO2 sensor */
+  #endif
 
   /* Set the Waspmote ID */
   frame.setID(node_ID);
@@ -83,8 +87,12 @@ void loop()
     /* and enable sensors */
     Gases.ON();
     COSensor.ON();
+
+    #ifdef MODE2 /* if we work on full demo, start other sensors */
     CO2Sensor.ON();
     NO2Sensor.ON();
+    #endif
+    
     delay(100);
 
     /**** READ SENSORS ****/
@@ -118,13 +126,16 @@ void Read_Sensors()
   /*                READ CO                       */
   COPPM = COSensor.readConcentration();
   /***********************************************/
-  
+
+
+  #ifdef MODE2 /* if we work on full demo, read other sensors */
   /*                READ CO2                      */
   CO2PPM = CO2Sensor.readConcentration();
   /**********************************************/
   
   /*                READ NO2                      */
   NO2PPM = NO2Sensor.readConcentration();
+  #endif
 }
 
 
@@ -142,17 +153,21 @@ void Print_Sensors_Values()
   USB.print(pressure);
   USB.println(F(" Pa"));
 
+  #ifdef MODE2 /* if we work on full demo, print CO information */
   USB.print(F(" CO2 concentration estimated: "));
   USB.print(CO2PPM);
   USB.println(F(" ppm"));
+  #endif
 
   USB.print(F(" CO concentration Estimated: "));
   USB.print(COPPM);
   USB.println(F(" ppm"));
 
+  #ifdef MODE2 /* if we work on full demo, print NO2 information */
   USB.print(F(" NO2 concentration Estimated: "));
   USB.print(NO2PPM);
-  USB.println(F(" ppm"));
+  USB.println(F(" ppm"));a
+  #endif
 }
 
 void Create_Ascii()
@@ -169,11 +184,14 @@ void Create_Ascii()
   /* Add pressure */
   frame.addSensor(SENSOR_GASES_PRES, pressure);
   /* Add CO2 PPM value */
+  frame.addSensor(SENSOR_GASES_CO, COPPM);
+
+  #ifdef MODE2 /* if we work on full demo, add other sensors to the frame */
+  /* Add CO PPM value */
   frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
   /* Add CO PPM value */
-  frame.addSensor(SENSOR_GASES_CO, COPPM);
-  /* Add CO PPM value */
   frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
+  #endif
 
   if ( error == 0) /* if we have the time from the Meshlium */
   {
@@ -189,7 +207,9 @@ void Create_Ascii()
   temperature = 0;
   humidity = 0;
   pressure = 0;
-  CO2PPM = 0;
   COPPM = 0;
+  #ifdef MODE2 /* if we work on full demo, clear other sensors */
+  CO2PPM = 0;
   NO2PPM = 0;
+  #endif
 }
