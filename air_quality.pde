@@ -135,8 +135,8 @@ void loop()
   {
     timer_unit = 0; /* reset the timer unit */
 
-    /* init XBee */
-    xbeeZB.ON();
+    /* init XBee - not needed here for the time being*/
+    /* xbeeZB.ON(); */
 
     /* and enable sensors */
     Gases.ON();
