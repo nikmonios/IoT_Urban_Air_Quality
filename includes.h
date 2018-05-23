@@ -35,7 +35,7 @@
 /**** GLOBAL & DEFINES ****/
 float NO2PPM = 0;    // Stores the NO2 value
 float COPPM = 0;    // Stores the CO value
-float temperature = 0; // Stores the temperature in ºC
+float temperature = 0; // Stores the temperature in ?C
 float humidity = 0;     // Stores the realitve humidity in %RH
 float pressure = 0;    // Stores the pressure in Pa
 float CO2PPM = 0; // stores the CO2 value
@@ -59,18 +59,50 @@ float CO2voltages[] =        { POINT1_VOLT_CO2, POINT2_VOLT_CO2, POINT3_VOLT_CO2
 //node ID
 char node_ID[] = "Board_Complete";
 
-//a unit that updates every 4 seconds
-//when 12 seconds have passed (so it has increased 3 times)
-//take measurements. 5 measurements every minute (5 * 12 = 60)
+// a unit that updates every 8 seconds
+// when 360 seconds have passed (so it has increased 45 times [sample_time])
+// take measurements.
 uint8_t timer_unit = 0;
 
+uint8_t sample_time = 45;
 
 // Destination Meshlium MAC address
 //////////////////////////////////////////
-char MESHLIUM_ADDRESS[] = "0013A2004098FB30"; 
+char MESHLIUM_ADDRESS[] = "000000000000FFFF"; /* broadcast mode */
 //////////////////////////////////////////
 
 // define variable to check if we can communicate with Meshlium
 uint8_t error;
+
+// define GPS timeout when connecting to satellites
+// this time is defined in seconds (240sec = 4minutes)
+#define TIMEOUT 240
+
+// define status variable for GPS connection
+bool status;
+
+/* variables for data logging */
+// define file name: MUST be 8.3 SHORT FILE NAME
+char filename[]="FILE1.TXT";
+
+// buffer to write into Sd File
+char toWrite[256];
+
+// define variables to read stored frames 
+uint8_t frameSD[MAX_FRAME+1];
+
+uint16_t lengthSD;
+
+int32_t numLines;
+
+// variables to define the file lines to be read
+int startLine;
+int endLine;
+
+// define variable
+uint8_t sd_answer;
+
+// battery level indicator
+uint8_t power_level;
 
 #endif

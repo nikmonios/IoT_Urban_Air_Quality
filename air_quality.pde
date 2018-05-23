@@ -1,34 +1,19 @@
 /*
     example woth board no.1.
 
-    This board has the NO2 and the Luminosity sensors on it.
+    This board has the NO2 and the Temp-Hum-Press sensors on it.
 
     Read sensors and print them to Serial Screen
 */
 
 #include <WaspSensorGas_v30.h>
 #include <WaspFrame.h>
-#include <WaspXBeeZB.h>
+#include <WaspXBee868LP.h>
+#include <WaspGPS.h>
 #include "coefficients.h"
 
 #define PDEBUG 1   /* enable serial print for debug reasons */
 /*#define MODE2  1*/    /* mode 2, when enabled, will read all sensors */
-
-/* variables for data logging */
-// define file name: MUST be 8.3 SHORT FILE NAME
-char filename[]="FILE1.TXT";
-// buffer to write into Sd File
-char toWrite[256];
-// define variables to read stored frames 
-uint8_t frameSD[MAX_FRAME+1];
-uint16_t lengthSD;
-int32_t numLines;
-// variables to define the file lines to be read
-int startLine;
-int endLine;
-// define variable
-uint8_t sd_answer;
-
 
 void setup()
 {
@@ -37,38 +22,318 @@ void setup()
   USB.println(F("Board is starting..."));
   #endif
 
-  
-  /* Calculate the slope and the intersection of the logarithmic functions */
-  COSensor.setCalibrationPoints(COres, COconcentrations, numPoints);           /* for CO  sensor */
-  
-  #ifdef MODE2 /* if we work on full demo, load other sensors */
-  CO2Sensor.setCalibrationPoints(CO2voltages, CO2concentrations, numPoints);   /* for CO2 sensor */
-  NO2Sensor.setCalibrationPoints(NO2res, NO2concentrations, numPoints);        /* for NO2 sensor */
-  #endif
-
   /* Set the Waspmote ID */
   frame.setID(node_ID);
 
-  /* Enable Real Time Clock */
-  RTC.ON();
+  /* setup the sensors that will be used in this application */
+  setup_app_sensors();
 
-  /* init XBee */
-  xbeeZB.ON();
+  /* setup RTC with the actual time, from the GPS */
+  setup_rtc();
+
+  /* setup the SD card */
+  setup_sd_card();
   
-  /* Check if there is a Meshlium nearby */
-  error = xbeeZB.setRTCfromMeshlium(MESHLIUM_ADDRESS);
+  #ifdef PDEBUG
+  USB.println("starting application now");
+  #endif
+}
+
+
+void loop()
+{
+  PWR.sleep(WTD_8S, ALL_OFF); /* sleep for 8 seconds, kill all sensors and boards */
+
+  #ifdef PDEBUG
+  USB.ON();
+  #endif
   
-  if ( error == 0) /* if we have a Meshlium nearby */
+  if( intFlag & WTD_INT ) /* when the 8 seconds of sleep pass, wake up */
   {
-    /* set real time and date as taken from the Meshlium */
-    RTC.getTime();
-    delay(10);
-    
     #ifdef PDEBUG
-    USB.println("took real time and date from Meshlium");
+    USB.println(F("---------------------"));
+    USB.println(F("WTD INT captured"));
+    USB.println(F("---------------------"));
+    #endif
+    
+    intFlag &= ~(WTD_INT); /* when you wake up, clean the flag */
+  }
+
+  timer_unit += 1;  /* update the timer unit every time you wake up */
+
+  if (timer_unit == sample_time) /* have we got 45 8_Sec interrupts (360 secs)? */
+  {
+    timer_unit = 0; /* reset the timer unit */
+
+    /* read the battery level */
+    power_level = PWR.getBatteryLevel();
+
+    /* run the application only if there is sufficient power ( > 15% ) */
+    if(power_level >= 15)
+    {
+      run_application(); /* main routine */
+    }
+  }
+  
+}
+
+/******************************* FUNCTIONS *******************************/
+
+/*
+ * 
+ */
+void Read_Sensors(void)
+{
+  /***********************************************/
+  /* READ TEMPERATURE, HUMIDITY, AND PRESSURE    */
+  #ifdef MODE2
+  temperature = Gases.getTemperature();
+  delay(100);
+  humidity = Gases.getHumidity();
+  delay(100);
+  pressure = Gases.getPressure();
+  delay(100);
+  #endif
+  /**********************************************/
+  
+  /*                READ CO                       */
+  COPPM = COSensor.readConcentration();
+  /***********************************************/
+
+
+  #ifdef MODE2 /* if we work on full demo, read other sensors */
+  /*                READ CO2                      */
+  CO2PPM = CO2Sensor.readConcentration();
+  /**********************************************/
+  
+  /*                READ NO2                      */
+  NO2PPM = NO2Sensor.readConcentration();
+  #endif
+}
+
+/*
+ * 
+ */
+void Print_Sensors_Values(void)
+{
+  #ifdef MODE2
+  USB.print(F(" Temperature: "));
+  USB.print(temperature);
+  USB.println(F(" Celsius Degrees |"));
+
+  USB.print(F(" Humidity : "));
+  USB.print(humidity);
+  USB.println(F(" %RH"));
+
+  USB.print(F(" Pressure : "));
+  USB.print(pressure);
+  USB.println(F(" Pa"));
+
+  //#ifdef MODE2 /* if we work on full demo, print CO information */
+  USB.print(F(" CO2 concentration estimated: "));
+  USB.print(CO2PPM);
+  USB.println(F(" ppm"));
+  #endif
+
+  USB.print(F(" CO concentration Estimated: "));
+  USB.print(COPPM);
+  USB.println(F(" ppm"));
+
+  #ifdef MODE2 /* if we work on full demo, print NO2 information */
+  USB.print(F(" NO2 concentration Estimated: "));
+  USB.print(NO2PPM);
+  USB.println(F(" ppm"));a
+  #endif
+}
+
+/*
+ * 
+ */
+void Create_Ascii(void)
+{
+  /* power up GPS */
+  GPS.ON();
+
+  status = GPS.waitForSignal(TIMEOUT);
+  delay(100);
+
+  
+  /* Create new frame (ASCII) */
+  frame.createFrame(ASCII, node_ID);
+  
+  /* Add temperature */
+  #ifdef MODE2
+  frame.addSensor(SENSOR_GASES_TC, temperature);
+  /* Add humidity */
+  frame.addSensor(SENSOR_GASES_HUM, humidity);
+  /* Add pressure */
+  frame.addSensor(SENSOR_GASES_PRES, pressure);
+  #endif
+  
+  /* Add CO2 PPM value */
+  frame.addSensor(SENSOR_GASES_CO, COPPM);
+
+  #ifdef MODE2 /* if we work on full demo, add other sensors to the frame */
+  /* Add CO PPM value */
+  frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
+  /* Add CO PPM value */
+  frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
+  #endif
+
+  // add latitude and longtitude
+  frame.addSensor(SENSOR_GPS, 
+                    GPS.convert2Degrees(GPS.latitude, GPS.NS_indicator),
+                    GPS.convert2Degrees(GPS.longitude, GPS.EW_indicator) );
+
+  //Add altitude [m]
+  frame.addSensor(SENSOR_ALTITUDE,GPS.altitude);
+    
+  //Add speed [km/h]
+  frame.addSensor(SENSOR_SPEED,GPS.speed);
+    
+  //Add course [degrees]
+  frame.addSensor(SENSOR_COURSE,GPS.course);
+
+  /* turn off the GPS to save power */
+  GPS.OFF();
+
+  
+  /* add timestamp from RTC */
+  RTC.getTime();
+  delay(10);
+  frame.addTimestamp();
+
+  
+  /* Show the frame if we are in debuf mode*/
+  #ifdef PDEBUG
+  frame.showFrame();
+  #endif
+
+
+  /* save the frame to the SD card */
+  memset(toWrite, 0x00, sizeof(toWrite) );
+
+  // Conversion from Binary to ASCII
+  Utils.hex2str( frame.buffer, toWrite, frame.length);
+  
+  /* some debug help here */
+  #ifdef PDEBUG
+  USB.print(F("Frame to be stored:"));
+  USB.println(toWrite);
+  #endif
+
+  /* now append data to file */
+  sd_answer = SD.appendln(filename, toWrite);
+  
+  if( sd_answer == 1 )
+  {
+    #ifdef PDEBUG
+    USB.println(F("Frame appended to file"));
+    #endif
+  }
+  else 
+  {
+    #ifdef PDEBUG
+    USB.println(F("Append failed"));
+    #endif
+  }
+  
+  /* reset values */
+  temperature = 0;
+  humidity = 0;
+  pressure = 0;
+  COPPM = 0;
+  #ifdef MODE2 /* if we work on full demo, clear other sensors */
+  CO2PPM = 0;
+  NO2PPM = 0;
+  #endif
+}
+
+/*
+ * 
+ */
+void read_logged_data_and_send(void)
+{
+  /* init XBee */
+  xbee868LP.ON();
+  
+  // get number of lines in file
+  numLines = SD.numln(filename);
+
+  // get specified lines from file
+  // get only the last file line
+  startLine = numLines - 1; 
+  endLine = numLines;
+
+  // iterate to get the File lines specified
+  for( int i = startLine; i < endLine ; i++ )
+  {  
+    // Get 'i' line -> SD.buffer
+    SD.catln( filename, i, 1); 
+    
+    // initialize frameSD
+    memset(frameSD, 0x00, sizeof(frameSD) ); 
+    
+    // conversion from ASCII to Binary 
+    lengthSD = Utils.str2hex(SD.buffer, frameSD );
+
+
+    /* not actually needed here -- just for debug */
+    // Conversion from ASCII to Binary
+    #ifdef PDEBUG
+    USB.print(F("Get previously stored frame:"));
+    #endif
+    
+    for(int j = 0; j < lengthSD; j++)
+    { 
+      #ifdef PDEBUG   
+      USB.print(frameSD[j],BYTE);
+      #endif
+    }
+    #ifdef PDEBUG
+    USB.println();
+    #endif
+    
+    /************************************************
+    * At this point 'frameSD' and 'lengthSD' can be 
+    * used as 'frame.buffer' and 'frame.length' to 
+    * send information via some communication module 
+    *************************************************/
+  }
+
+  #ifdef PDEBUG
+  USB.println();
+  USB.println();
+  #endif
+  /* debug ends here */
+
+  /* here send the frame via XBEE */
+  /* then, send the frame */
+  error = xbee868LP.send( MESHLIUM_ADDRESS, frameSD, lengthSD );
+
+  // check TX flag
+  if( error == 0 )
+  {
+    #ifdef PDEBUG
+    USB.println(F("send ok"));
+    #endif
+  }
+  else 
+  {
+    #ifdef PDEBUG
+    USB.println(F("send error"));
     #endif
   }
 
+  /* turn ZigBee off, to save power */
+  xbee868LP.OFF();
+}
+
+/*
+ * 
+ */
+void setup_sd_card(void)
+{
   // Set SD ON, to log samples
   SD.ON();
 
@@ -103,53 +368,88 @@ void setup()
     USB.println(F("file not created"));
     #endif
   }
+}
+
+/*
+ * 
+ */
+void setup_rtc(void)
+{
+  /* Enable Real Time Clock */
+  RTC.ON();
+
+  // set GPS ON  
+  GPS.ON();
+
+  /* wait for GPS signal for specific time */
+  status = GPS.waitForSignal(TIMEOUT);
+
+  /* if GPS is connected then set Time and Date to RTC */ 
+  if( status == true )
+  {    
+    // set time in RTC from GPS time (GMT time)
+    GPS.setTimeFromGPS();
+  }
+
+  /* switch GPS off, to save power */
+  GPS.OFF();
+}
+
+/*
+ * 
+ */
+void setup_app_sensors(void)
+{
+  /* Calculate the slope and the intersection of the logarithmic functions */
+  COSensor.setCalibrationPoints(COres, COconcentrations, numPoints);           /* for CO  sensor */
   
-  #ifdef PDEBUG
-  USB.println("starting application now");
+  #ifdef MODE2 /* if we work on full demo, load other sensors */
+  CO2Sensor.setCalibrationPoints(CO2voltages, CO2concentrations, numPoints);   /* for CO2 sensor */
+  
+  NO2Sensor.setCalibrationPoints(NO2res, NO2concentrations, numPoints);        /* for NO2 sensor */
   #endif
 }
 
-
-void loop()
+/*
+ * 
+ */
+bool check_the_date(void)
 {
-  PWR.sleep(WTD_8S, ALL_OFF); /* sleep for 8 seconds, kill all sensors and boards */
+  /* see the date */
+  char* Date = strtok(RTC.getTime(),":");
 
-  #ifdef PDEBUG
-  USB.ON();
-  #endif
-  
-  if( intFlag & WTD_INT ) /* when the 8 seconds of sleep pass, wake up */
+  /* if one day has passed, return TRUE */
+  if(Date)
   {
-    #ifdef PDEBUG
-    USB.println(F("---------------------"));
-    USB.println(F("WTD INT captured"));
-    USB.println(F("---------------------"));
-    #endif
-    
-    intFlag &= ~(WTD_INT); /* when you wake up, clean the flag */
+    return true;
   }
-
-  timer_unit += 1;  /* update the timer unit every time you wake up */
-
-  if (timer_unit == 15) /* have we got 15 8_Sec interrupts (120 secs)? */
+  /* else return FALSE */
+  else
   {
-    timer_unit = 0; /* reset the timer unit */
+    return false;
+  }
+}
 
-    /* init XBee - not needed here for the time being*/
-    /* xbeeZB.ON(); */
-
-    /* and enable sensors */
+/*
+ * 
+ */
+void run_application(void)
+{
+    /* enable sensors */
     Gases.ON();
-    
+
+    /* enable the CO sensor */
     COSensor.ON();
 
     #ifdef MODE2 /* if we work on full demo, start other sensors */
     CO2Sensor.ON();
     NO2Sensor.ON();
     #endif
-    
-    delay(100);
 
+    /* wait 1 minute for the sensors to warm-up */
+    one_minute_delay();
+
+    
     /**** READ SENSORS ****/
     Read_Sensors();
 
@@ -159,300 +459,24 @@ void loop()
     #endif
 
     /**** CREATE ASCII FRAME ****/
-    #ifdef PDEBUG
     Create_Ascii();
-    #endif
-  }
-}
 
-/**** FUNCTIONS ****/
-
-void Read_Sensors()
-{
-  /***********************************************/
-  /* READ TEMPERATURE, HUMIDITY, AND PRESSURE    */
-  #ifdef MODE2
-  delay(4000);
-  temperature = Gases.getTemperature();
-  delay(100);
-  humidity = Gases.getHumidity();
-  delay(100);
-  pressure = Gases.getPressure();
-  delay(100);
-  #endif
-  /**********************************************/
-  
-  /*                READ CO                       */
-  COPPM = COSensor.readConcentration();
-  /***********************************************/
-
-
-  #ifdef MODE2 /* if we work on full demo, read other sensors */
-  /*                READ CO2                      */
-  CO2PPM = CO2Sensor.readConcentration();
-  /**********************************************/
-  
-  /*                READ NO2                      */
-  NO2PPM = NO2Sensor.readConcentration();
-  #endif
-}
-
-
-void Print_Sensors_Values()
-{
-  #ifdef MODE2
-  USB.print(F(" Temperature: "));
-  USB.flush();
-  USB.print(temperature);
-  USB.println(F(" Celsius Degrees |"));
-
-  USB.print(F(" Humidity : "));
-  USB.print(humidity);
-  USB.println(F(" %RH"));
-
-  USB.print(F(" Pressure : "));
-  USB.print(pressure);
-  USB.println(F(" Pa"));
-
-  //#ifdef MODE2 /* if we work on full demo, print CO information */
-  USB.print(F(" CO2 concentration estimated: "));
-  USB.print(CO2PPM);
-  USB.println(F(" ppm"));
-  #endif
-
-  USB.print(F(" CO concentration Estimated: "));
-  USB.print(COPPM);
-  USB.println(F(" ppm"));
-
-  #ifdef MODE2 /* if we work on full demo, print NO2 information */
-  USB.print(F(" NO2 concentration Estimated: "));
-  USB.print(NO2PPM);
-  USB.println(F(" ppm"));a
-  #endif
-}
-
-void Create_Ascii()
-{
-  /* first see if we have achieved communication with Meshlium */
-  error = xbeeZB.setRTCfromMeshlium(MESHLIUM_ADDRESS);
-
-  /* Create new frame (ASCII) */
-  frame.createFrame(ASCII, node_ID);
-  
-  /* Add temperature */
-  #ifdef MODE2
-  frame.addSensor(SENSOR_GASES_TC, temperature);
-  /* Add humidity */
-  frame.addSensor(SENSOR_GASES_HUM, humidity);
-  /* Add pressure */
-  frame.addSensor(SENSOR_GASES_PRES, pressure);
-  #endif
-  
-  /* Add CO2 PPM value */
-  frame.addSensor(SENSOR_GASES_CO, COPPM);
-
-  #ifdef MODE2 /* if we work on full demo, add other sensors to the frame */
-  /* Add CO PPM value */
-  frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
-  /* Add CO PPM value */
-  frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
-  #endif
-
-  if ( error == 0) /* if we have the time from the Meshlium */
-  {
-    /* add timestamp from RTC */
-    RTC.getTime();
-    delay(10);
-    frame.addTimestamp();
-  }
-  
-  /* Show the frame */
-  #ifdef PDEBUG
-  frame.showFrame();
-  #endif
-
-  memset(toWrite, 0x00, sizeof(toWrite) );
-
-  // Conversion from Binary to ASCII
-  Utils.hex2str( frame.buffer, toWrite, frame.length);
-  
-  /* some debug help here */
-  #ifdef PDEBUG
-  USB.print(F("Frame to be stored:"));
-  USB.println(toWrite);
-  #endif
-
-  /* now append data to file */
-  sd_answer = SD.appendln(filename, toWrite);
-  
-  if( sd_answer == 1 )
-  {
-    #ifdef PDEBUG
-    USB.println(F("Frame appended to file"));
-    #endif
-  }
-  else 
-  {
-    #ifdef PDEBUG
-    USB.println(F("Append failed"));
-    #endif
-  }
-  
-  /* reset values */
-  /* temperature = 0;
-  humidity = 0;
-  pressure = 0;*/
-  COPPM = 0;
-  #ifdef MODE2 /* if we work on full demo, clear other sensors */
-  CO2PPM = 0;
-  NO2PPM = 0;
-  #endif
-}
-
-void read_log_data()
-{
-  // get number of lines in file
-  numLines = SD.numln(filename);
-
-  // get specified lines from file
-  // get only the last file line
-  startLine = numLines-1; 
-  endLine = numLines;
-
-  // iterate to get the File lines specified
-  for( int i=startLine; i<endLine ; i++ )
-  {  
-    // Get 'i' line -> SD.buffer
-    SD.catln( filename, i, 1); 
-    
-    // initialize frameSD
-    memset(frameSD, 0x00, sizeof(frameSD) ); 
-    
-    // conversion from ASCII to Binary 
-    lengthSD = Utils.str2hex(SD.buffer, frameSD );
-
-
-    /* not actually needed here -- just for debug */
-    // Conversion from ASCII to Binary
-    #ifdef PDEBUG
-    USB.print(F("Get previously stored frame:"));
-    #endif
-    
-    for(int j=0; j < lengthSD; j++)
-    { 
-      #ifdef PDEBUG   
-      USB.print(frameSD[j],BYTE);
-      #endif
+    /* if a day has passed, send the logged data to Meshlium */
+    if(check_the_date() == true)
+    {
+      read_logged_data_and_send();
     }
-    #ifdef PDEBUG
-    USB.println();
-    #endif
-    
-    /************************************************
-    * At this point 'frameSD' and 'lengthSD' can be 
-    * used as 'frame.buffer' and 'frame.length' to 
-    * send information via some communication module 
-    *************************************************/
-  }
-
-  #ifdef PDEBUG
-  USB.println();
-  USB.println();
-  #endif
-  /* debug ends here */
-
-  /* here send the frame via XBEE */
-  /* first check XBee's network parameters */
-  checkNetworkParams();
-
-  /* then, send the frame */
-  error = xbeeZB.send( MESHLIUM_ADDRESS, frameSD, lengthSD );
-
-  // check TX flag
-  if( error == 0 )
-  {
-    #ifdef PDEBUG
-    USB.println(F("send ok"));
-    #endif
-    
-    // blink green LED
-    Utils.blinkGreenLED();
-  }
-  else 
-  {
-    #ifdef PDEBUG
-    USB.println(F("send error"));
-    #endif
-    
-    // blink red LED
-    Utils.blinkRedLED();
-  }
 }
 
-void checkNetworkParams()
+/*
+ * 
+ */
+void one_minute_delay(void)
 {
-  // 1. get operating 64-b PAN ID
-  xbeeZB.getOperating64PAN();
+  uint8_t i = 0; /* 60 seconds counter */
 
-  // 2. wait for association indication
-  xbeeZB.getAssociationIndication();
- 
-  while( xbeeZB.associationIndication != 0 )
-  { 
-    delay(2000);
-    
-    // get operating 64-b PAN ID
-    xbeeZB.getOperating64PAN();
-
-    #ifdef PDEBUG
-    USB.print(F("operating 64-b PAN ID: "));
-    USB.printHex(xbeeZB.operating64PAN[0]);
-    USB.printHex(xbeeZB.operating64PAN[1]);
-    USB.printHex(xbeeZB.operating64PAN[2]);
-    USB.printHex(xbeeZB.operating64PAN[3]);
-    USB.printHex(xbeeZB.operating64PAN[4]);
-    USB.printHex(xbeeZB.operating64PAN[5]);
-    USB.printHex(xbeeZB.operating64PAN[6]);
-    USB.printHex(xbeeZB.operating64PAN[7]);
-    USB.println();
-    #endif  
-    
-    xbeeZB.getAssociationIndication();
+  for(i = 0; i < 60; i++)
+  {
+    delay(1000);
   }
-
-  #ifdef PDEBUG
-  USB.println(F("\nJoined a network!"));
-  #endif
-
-  // 3. get network parameters 
-  xbeeZB.getOperating16PAN();
-  xbeeZB.getOperating64PAN();
-  xbeeZB.getChannel();
-
-  #ifdef PDEBUG
-  USB.print(F("operating 16-b PAN ID: "));
-  USB.printHex(xbeeZB.operating16PAN[0]);
-  USB.printHex(xbeeZB.operating16PAN[1]);
-  USB.println();
-  #endif
-
-  #ifdef PDEBUG
-  USB.print(F("operating 64-b PAN ID: "));
-  USB.printHex(xbeeZB.operating64PAN[0]);
-  USB.printHex(xbeeZB.operating64PAN[1]);
-  USB.printHex(xbeeZB.operating64PAN[2]);
-  USB.printHex(xbeeZB.operating64PAN[3]);
-  USB.printHex(xbeeZB.operating64PAN[4]);
-  USB.printHex(xbeeZB.operating64PAN[5]);
-  USB.printHex(xbeeZB.operating64PAN[6]);
-  USB.printHex(xbeeZB.operating64PAN[7]);
-  USB.println();
-  #endif
-
-  #ifdef PDEBUG
-  USB.print(F("channel: "));
-  USB.printHex(xbeeZB.channel);
-  USB.println();
-  #endif
-
 }
