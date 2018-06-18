@@ -15,6 +15,8 @@
 #define PDEBUG 1   /* enable serial print for debug reasons */
 /*#define MODE2  1*/    /* mode 2, when enabled, will read all sensors */
 
+int daytime_mode;
+
 void setup()
 {
   #ifdef PDEBUG
@@ -61,17 +63,38 @@ void loop()
 
   timer_unit += 1;  /* update the timer unit every time you wake up */
 
-  if (timer_unit == sample_time) /* have we got 45 8_Sec interrupts (360 secs)? */
+  daytime_mode = strcmp(daytime,"DAY"); /* is it day or night? */
+
+  if(daytime_mode == 0) /* if it is day , the sampling will occur every 6 minutes*/
   {
-    timer_unit = 0; /* reset the timer unit */
-
-    /* read the battery level */
-    power_level = PWR.getBatteryLevel();
-
-    /* run the application only if there is sufficient power ( > 15% ) */
-    if(power_level >= 15)
+    if (timer_unit == sample_time_day) /* have we got 45 8_Sec interrupts (360 secs)? */
     {
-      run_application(); /* main routine */
+      timer_unit = 0; /* reset the timer unit */
+
+      /* read the battery level */
+      power_level = PWR.getBatteryLevel();
+
+      /* run the application only if there is sufficient power ( > 15% ) */
+      if(power_level >= 15)
+      {
+        run_application(); /* main routine */
+      }
+    }
+  }
+  else /* else, if it is night, the sampling will occur every 1 hour */
+  {
+    if (timer_unit == sample_time_night) /* have we got 45 8_Sec interrupts (360 secs)? */
+    {
+      timer_unit = 0; /* reset the timer unit */
+
+      /* read the battery level */
+      power_level = PWR.getBatteryLevel();
+
+      /* run the application only if there is sufficient power ( > 15% ) */
+      if(power_level >= 15)
+      {
+        run_application(); /* main routine */
+      }
     }
   }
   
@@ -417,6 +440,9 @@ bool check_the_date(void)
 {
   /* see the date */
   char* Date = strtok(RTC.getTime(),":");
+
+  /* check if it is day or night */
+  snprintf( daytime, sizeof(daytime), "%s", "DAY");
 
   /* if one day has passed, return TRUE */
   if(Date)

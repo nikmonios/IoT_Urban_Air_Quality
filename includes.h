@@ -1,5 +1,5 @@
-#ifndef COEFFICIENTS_H
-#define COEFFICIENTS_H
+#ifndef INCLUDES_H
+#define INCLUDES_H
 
 
 // Concentratios used in calibration process (PPM Values)
@@ -62,9 +62,10 @@ char node_ID[] = "Board_Complete";
 // a unit that updates every 8 seconds
 // when 360 seconds have passed (so it has increased 45 times [sample_time])
 // take measurements.
-uint8_t timer_unit = 0;
+uint16_t timer_unit = 0;
 
-uint8_t sample_time = 45;
+uint16_t sample_time_day = 45;
+uint16_t sample_time_night = 450;
 
 // Destination Meshlium MAC address
 //////////////////////////////////////////
@@ -104,5 +105,8 @@ uint8_t sd_answer;
 
 // battery level indicator
 uint8_t power_level;
+
+//Day or Night? for night mode
+char daytime[5];
 
 #endif
