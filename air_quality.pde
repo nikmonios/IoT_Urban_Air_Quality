@@ -10,7 +10,7 @@
 #include <WaspFrame.h>
 #include <WaspXBee868LP.h>
 #include <WaspGPS.h>
-#include "coefficients.h"
+#include "includes.h"
 
 #define PDEBUG 1   /* enable serial print for debug reasons */
 /*#define MODE2  1*/    /* mode 2, when enabled, will read all sensors */
