@@ -10,7 +10,7 @@
 #include <WaspFrame.h>
 #include <WaspXBee868LP.h>
 #include <WaspGPS.h>
-#include "includes.h"
+#include "coefficients.h"
 
 #define PDEBUG 1   /* enable serial print for debug reasons */
 /*#define MODE2  1*/    /* mode 2, when enabled, will read all sensors */
@@ -414,6 +414,10 @@ void setup_rtc(void)
     GPS.setTimeFromGPS();
   }
 
+  /* at this point, compensate the time, to match the Greek time */
+  /* add 3 hours to the hour that was taken from the GPS */
+  RTC.setTime(RTC.year, RTC.month, RTC.date, RTC.dow(RTC.year, RTC.month, RTC.day), RTC.hour + 3, RTC.minute, RTC.second);
+  
   /* switch GPS off, to save power */
   GPS.OFF();
 }
@@ -438,19 +442,40 @@ void setup_app_sensors(void)
  */
 bool check_the_date(void)
 {
-  /* see the date */
-  char* Date = strtok(RTC.getTime(),":");
+  bool day_flag_updated = false;
+  int temp_hour = 0;
+  
+  /* see the day (eg. is it Monday, Tuesday etc.) */
+  char* Date = strtok(RTC.getTime(),",");
 
-  /* check if it is day or night */
-  snprintf( daytime, sizeof(daytime), "%s", "DAY");
+  if(strcmp(Date, temp_day)) /* if the day hasn't changed, don't update the flag */
+  {
+    day_flag_updated = false;
+  }
+  else /* if a day has passed, update the flag */
+  {
+    temp_day = Date; /* update the temp day variable */
+    day_flag_updated = true; /* update the flag, so the data can be sent */
+  }
+
+  temp_hour = (int)RTC.hour; /* check what time it is */
+
+  /* update the daytime */
+  if(temp_hour <= 6 || temp_hour >= 19)
+  {
+    daytime = "NIGHT"; /* between 19:00 and 6:00, it is night */
+  }
+  else
+  {
+    daytime = "DAY"; /* else, it is day */
+  }
 
   /* if one day has passed, return TRUE */
-  if(Date)
+  if(day_flag_updated)
   {
     return true;
   }
-  /* else return FALSE */
-  else
+  else /* else return FALSE */
   {
     return false;
   }
