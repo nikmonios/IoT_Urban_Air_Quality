@@ -30,11 +30,14 @@ void setup()
   /* setup the sensors that will be used in this application */
   setup_app_sensors();
 
-  /* setup RTC with the actual time, from the GPS */
-  setup_rtc();
-
   /* setup the SD card */
   setup_sd_card();
+
+  /* setup the GPS */
+  setup_gps();
+
+  /* setup RTC with the actual time, from the GPS */
+  setup_rtc();
   
   #ifdef PDEBUG
   USB.println("starting application now");
@@ -83,7 +86,7 @@ void loop()
   }
   else /* else, if it is night, the sampling will occur every 1 hour */
   {
-    if (timer_unit == sample_time_night) /* have we got 45 8_Sec interrupts (360 secs)? */
+    if (timer_unit == sample_time_night) /* have we got 450 8_Sec interrupts (3600 secs)? */
     {
       timer_unit = 0; /* reset the timer unit */
 
@@ -174,64 +177,75 @@ void Print_Sensors_Values(void)
  */
 void Create_Ascii(void)
 {
+  /* power up SD card */
+  SD.ON();
+  
   /* power up GPS */
   GPS.ON();
 
+  // load ephemeris previously stored in SD
+  GPS.loadEphems();
+  
   status = GPS.waitForSignal(TIMEOUT);
-  delay(100);
 
+  if( status == true )
+  {
+    /* Create new frame (ASCII) */
+    frame.createFrame(ASCII, node_ID);
   
-  /* Create new frame (ASCII) */
-  frame.createFrame(ASCII, node_ID);
-  
-  /* Add temperature */
-  #ifdef MODE2
-  frame.addSensor(SENSOR_GASES_TC, temperature);
-  /* Add humidity */
-  frame.addSensor(SENSOR_GASES_HUM, humidity);
-  /* Add pressure */
-  frame.addSensor(SENSOR_GASES_PRES, pressure);
-  #endif
-  
-  /* Add CO2 PPM value */
-  frame.addSensor(SENSOR_GASES_CO, COPPM);
+    #ifdef MODE2 /* if we work on full demo */
+    /***********************************************/
+    /* Add temperature */
+    frame.addSensor(SENSOR_GASES_TC, temperature);
+    
+    /* Add humidity */
+    frame.addSensor(SENSOR_GASES_HUM, humidity);
+    
+    /* Add pressure */
+    frame.addSensor(SENSOR_GASES_PRES, pressure);
 
-  #ifdef MODE2 /* if we work on full demo, add other sensors to the frame */
-  /* Add CO PPM value */
-  frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
-  /* Add CO PPM value */
-  frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
-  #endif
+    /* Add CO PPM value */
+    frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
+    
+    /* Add NO2 PPM value */
+    frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
+    /***********************************************/
+    #endif
+  
+    /* Add CO2 PPM value */
+    frame.addSensor(SENSOR_GASES_CO, COPPM);
 
-  // add latitude and longtitude
-  frame.addSensor(SENSOR_GPS, 
+    // add latitude and longtitude
+    frame.addSensor(SENSOR_GPS, 
                     GPS.convert2Degrees(GPS.latitude, GPS.NS_indicator),
                     GPS.convert2Degrees(GPS.longitude, GPS.EW_indicator) );
 
-  //Add altitude [m]
-  frame.addSensor(SENSOR_ALTITUDE,GPS.altitude);
+    //Add altitude [m]
+    frame.addSensor(SENSOR_ALTITUDE,GPS.altitude);
     
-  //Add speed [km/h]
-  frame.addSensor(SENSOR_SPEED,GPS.speed);
+    //Add speed [km/h]
+    frame.addSensor(SENSOR_SPEED,GPS.speed);
     
-  //Add course [degrees]
-  frame.addSensor(SENSOR_COURSE,GPS.course);
+    //Add course [degrees]
+    frame.addSensor(SENSOR_COURSE,GPS.course);
 
-  /* turn off the GPS to save power */
-  GPS.OFF();
+    // update the ephemeris data
+    GPS.saveEphems();
+    
+    /* turn off the GPS to save power */
+    GPS.OFF();
 
   
-  /* add timestamp from RTC */
-  RTC.getTime();
-  delay(10);
-  frame.addTimestamp();
-
+    /* add timestamp from RTC */
+    RTC.getTime();
+    delay(10);
+    frame.addTimestamp();
+  }
   
   /* Show the frame if we are in debuf mode*/
   #ifdef PDEBUG
   frame.showFrame();
   #endif
-
 
   /* save the frame to the SD card */
   memset(toWrite, 0x00, sizeof(toWrite) );
@@ -260,13 +274,19 @@ void Create_Ascii(void)
     USB.println(F("Append failed"));
     #endif
   }
+
+
+  /* close SD */
+  SD.OFF();
+
   
   /* reset values */
+  COPPM = 0;
+  
+  #ifdef MODE2 /* if we work on full demo, clear other sensors */
   temperature = 0;
   humidity = 0;
   pressure = 0;
-  COPPM = 0;
-  #ifdef MODE2 /* if we work on full demo, clear other sensors */
   CO2PPM = 0;
   NO2PPM = 0;
   #endif
@@ -275,17 +295,23 @@ void Create_Ascii(void)
 /*
  * 
  */
-void read_logged_data_and_send(void)
+void read_logged_data_and_send(int index)
 {
+  /* speed variable will check if the vehicle is moving or not */
+  int vehicle_speed = 0;
+  
   /* init XBee */
   xbee868LP.ON();
+
+  /* open SD card */
+  SD.ON();
   
   // get number of lines in file
   numLines = SD.numln(filename);
 
   // get specified lines from file
   // get only the last file line
-  startLine = numLines - 1; 
+  startLine = index; 
   endLine = numLines;
 
   // iterate to get the File lines specified
@@ -322,32 +348,46 @@ void read_logged_data_and_send(void)
     * used as 'frame.buffer' and 'frame.length' to 
     * send information via some communication module 
     *************************************************/
+
+    vehicle_speed = (int)GPS.speed;
+  
+    if (vehicle_speed < 5) // vehicle has slowed down or not moving
+    {
+      /* here send the frame via XBEE */
+      /* send the frame to anyone listening */
+      error = xbee868LP.send( MESHLIUM_ADDRESS, frameSD, lengthSD );
+
+      // check TX flag
+      if( error == 0 )
+      {
+        transmission_index++; // update global variable
+        USB.println(F("send ok"));
+      }
+      else 
+      {
+        USB.println(F("send error"));
+      }
+    }
+    else
+    {
+      /**** if we are moving, abort transmission ****/
+    
+      /* close SD card */
+      SD.OFF();
+  
+      /* turn ZigBee off, to save power */
+      xbee868LP.OFF();
+    
+      /* return to other code execution */
+      return;
+    }
+    
   }
-
-  #ifdef PDEBUG
-  USB.println();
-  USB.println();
-  #endif
-  /* debug ends here */
-
-  /* here send the frame via XBEE */
-  /* then, send the frame */
-  error = xbee868LP.send( MESHLIUM_ADDRESS, frameSD, lengthSD );
-
-  // check TX flag
-  if( error == 0 )
-  {
-    #ifdef PDEBUG
-    USB.println(F("send ok"));
-    #endif
-  }
-  else 
-  {
-    #ifdef PDEBUG
-    USB.println(F("send error"));
-    #endif
-  }
-
+  
+  /**** transmission ended, close modules ****/
+  /* close SD card */
+  SD.OFF();
+ 
   /* turn ZigBee off, to save power */
   xbee868LP.OFF();
 }
@@ -404,6 +444,9 @@ void setup_rtc(void)
   // set GPS ON  
   GPS.ON();
 
+  // load ephemeris previously stored in SD
+  GPS.loadEphems();
+  
   /* wait for GPS signal for specific time */
   status = GPS.waitForSignal(TIMEOUT);
 
@@ -417,6 +460,9 @@ void setup_rtc(void)
   /* at this point, compensate the time, to match the Greek time */
   /* add 3 hours to the hour that was taken from the GPS */
   RTC.setTime(RTC.year, RTC.month, RTC.date, RTC.dow(RTC.year, RTC.month, RTC.day), RTC.hour + 3, RTC.minute, RTC.second);
+
+  // update ephemeris
+  GPS.saveEphems();
   
   /* switch GPS off, to save power */
   GPS.OFF();
@@ -429,15 +475,53 @@ void setup_app_sensors(void)
 {
   /* Calculate the slope and the intersection of the logarithmic functions */
   COSensor.setCalibrationPoints(COres, COconcentrations, numPoints);           /* for CO  sensor */
+
   
   #ifdef MODE2 /* if we work on full demo, load other sensors */
+  
   CO2Sensor.setCalibrationPoints(CO2voltages, CO2concentrations, numPoints);   /* for CO2 sensor */
   
   NO2Sensor.setCalibrationPoints(NO2res, NO2concentrations, numPoints);        /* for NO2 sensor */
+  
   #endif
 }
 
 /*
+ * 
+ */
+void setup_gps(void)
+{
+  // define status variable for GPS connection
+  bool status;
+  
+  // Inits SD pins
+  SD.ON();
+
+  // Turn GPS on
+  GPS.ON();
+  
+  ///////////////////////////////////////    
+  // wait for GPS signal for specific time
+  ////////////////////////////////////// 
+  status = GPS.waitForSignal(TIMEOUT);
+  
+  //////////////////////////////////////////////////////////////////////// 
+  // if GPS is connected then store/load ephemeris to enable hot start
+  //////////////////////////////////////////////////////////////////////// 
+  if( status == true )
+  {        
+      // store ephemeris in "EPHEM.TXT"
+      GPS.saveEphems();
+  }
+
+  // switch SD card off
+  SD.OFF();
+  
+  // switch GPS off
+  GPS.OFF();
+}
+
+ /*
  * 
  */
 bool check_the_date(void)
@@ -486,19 +570,22 @@ bool check_the_date(void)
  */
 void run_application(void)
 {
-    /* enable sensors */
+    /* enable sensors board */
     Gases.ON();
 
     /* enable the CO sensor */
     COSensor.ON();
 
+
     #ifdef MODE2 /* if we work on full demo, start other sensors */
+    
     CO2Sensor.ON();
     NO2Sensor.ON();
+    
     #endif
 
-    /* wait 1 minute for the sensors to warm-up */
-    one_minute_delay();
+    /* wait 90 seconds for the sensors to warm-up */
+    ninety_seconds_delay();
 
     
     /**** READ SENSORS ****/
@@ -512,21 +599,84 @@ void run_application(void)
     /**** CREATE ASCII FRAME ****/
     Create_Ascii();
 
+    /**** CHECK IF WE ARE STOPPED AND THERE IS A ZIGBEE STATION NEARBY ****/
+    Send_Data();
+
     /* if a day has passed, send the logged data to Meshlium */
     if(check_the_date() == true)
     {
-      read_logged_data_and_send();
+      /* power up the GPS */
+      GPS.ON();
+
+      /* load ephemeris */
+      GPS.loadEphems();
+
+      /* send the data to Meshlium */
+      read_logged_data_and_send(transmission_index);
+
+      /* update the ephemeris */
+      GPS.saveEphems();
+
+      /* close the GPS module */
+      GPS.OFF();
     }
 }
 
 /*
  * 
  */
-void one_minute_delay(void)
+void Send_Data(void)
 {
-  uint8_t i = 0; /* 60 seconds counter */
+  /* speed variable will check if the vehicle is moving or not */
+  int vehicle_speed = 0;
+  
+  /* power up GPS */
+  GPS.ON();
 
-  for(i = 0; i < 60; i++)
+  // load ephemeris previously stored in SD
+  GPS.loadEphems();
+  
+  status = GPS.waitForSignal(TIMEOUT);
+
+  if( status == true ) /* we have GPS signal */
+  {
+    /* check if the vehicle is not moving */
+    vehicle_speed = (int)GPS.speed;
+
+    if (vehicle_speed < 5) // vehicle has slowed down or not moving
+    {
+      /* now it is a good time to check if there is a Zigbee Meshlium nearby */
+      read_logged_data_and_send(transmission_index);
+    }
+    else
+    {
+      /**** we are moving , abort transmission ****/
+      /* update ephemeris data */
+      GPS.saveEphems();
+
+      /* close the GPS module */
+      GPS.OFF();
+
+      /* return to other code execution */
+      return;
+    }
+  }
+
+  /* update ephemeris data */
+  GPS.saveEphems();
+
+  /* close the GPS module */
+  GPS.OFF();
+}
+
+ /*
+  * 
+  */
+void ninety_seconds_delay(void)
+{
+  uint8_t i = 0; /* 90 seconds counter */
+
+  for(i = 0; i < 90; i++)
   {
     delay(1000);
   }
