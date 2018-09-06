@@ -35,7 +35,7 @@
 /**** GLOBAL & DEFINES ****/
 float NO2PPM = 0;    /* Stores the NO2 value */
 float COPPM = 0;    /* Stores the CO value */
-float temperature = 0; /* Stores the temperature in ?C */
+float temperature = 0; /* Stores the temperature in ºC */
 float humidity = 0;     /* Stores the realitve humidity in %RH */
 float pressure = 0;    /* Stores the pressure in Pa */
 float CO2PPM = 0; /* stores the CO2 value */
@@ -65,8 +65,8 @@ char node_ID[] = "Board_Complete";
  *  take measurements. */
 uint16_t timer_unit = 0;
 
-uint16_t sample_time_day = 45;
-uint16_t sample_time_night = 450;
+uint16_t sample_time_day = 4;
+uint16_t sample_time_night = 4;
 
 /* Destination Meshlium MAC address */
 //////////////////////////////////////////
@@ -108,7 +108,7 @@ uint8_t sd_answer;
 uint8_t power_level;
 
 /* Day or Night? for night mode */
-char* daytime;
+char* daytime = "DAY"; /* initialize in day */
 
 /* temporary day of week variable, to see if a day has passed */
 char* temp_day = "Mon";

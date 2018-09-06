@@ -33,11 +33,8 @@ void setup()
   /* setup the SD card */
   setup_sd_card();
 
-  /* setup the GPS */
-  setup_gps();
-
-  /* setup RTC with the actual time, from the GPS */
-  setup_rtc();
+  /* setup the GPS and RTC modules */
+  setup_gps_and_rtc();
   
   #ifdef PDEBUG
   USB.println("starting application now");
@@ -64,7 +61,7 @@ void loop()
     intFlag &= ~(WTD_INT); /* when you wake up, clean the flag */
   }
 
-  timer_unit += 1;  /* update the timer unit every time you wake up */
+  timer_unit++;  /* update the timer unit every time you wake up */
 
   daytime_mode = strcmp(daytime,"DAY"); /* is it day or night? */
 
@@ -81,6 +78,11 @@ void loop()
       if(power_level >= 15)
       {
         run_application(); /* main routine */
+
+        /* check if battery is charging from solar panel, in debug mode */
+        #ifdef PDEBUG
+        see_battery_status();
+        #endif
       }
     }
   }
@@ -110,31 +112,31 @@ void loop()
  */
 void Read_Sensors(void)
 {
-  /***********************************************/
-  /* READ TEMPERATURE, HUMIDITY, AND PRESSURE    */
+  /**************MODE 2 ONLY*********************/
   #ifdef MODE2
+  
+  /*                READ CO2                    */
+  CO2PPM = CO2Sensor.readConcentration();
+  /**********************************************/
+  
+  /*                READ NO2                    */
+  NO2PPM = NO2Sensor.readConcentration();
+  #endif
+  /***************MODE 2 ENDS*********************/
+
+
+  /* READ TEMPERATURE, HUMIDITY, PRESSURE        */
   temperature = Gases.getTemperature();
   delay(100);
   humidity = Gases.getHumidity();
   delay(100);
   pressure = Gases.getPressure();
   delay(100);
-  #endif
-  /**********************************************/
   
-  /*                READ CO                       */
+  /*                READ CO                      */
   COPPM = COSensor.readConcentration();
   /***********************************************/
 
-
-  #ifdef MODE2 /* if we work on full demo, read other sensors */
-  /*                READ CO2                      */
-  CO2PPM = CO2Sensor.readConcentration();
-  /**********************************************/
-  
-  /*                READ NO2                      */
-  NO2PPM = NO2Sensor.readConcentration();
-  #endif
 }
 
 /*
@@ -142,7 +144,23 @@ void Read_Sensors(void)
  */
 void Print_Sensors_Values(void)
 {
+  /* MODE 2 DEBUG INFO STARTS HERE */
   #ifdef MODE2
+
+  USB.print(F(" NO2 concentration Estimated: "));
+  USB.print(NO2PPM);
+  USB.println(F(" ppm"));
+
+  USB.print(F(" CO2 concentration estimated: "));
+  USB.print(CO2PPM);
+  USB.println(F(" ppm"));
+  #endif
+  /* MODE 2 DEBUG INFO ENDS HERE */
+
+  USB.print(F(" CO concentration Estimated: "));
+  USB.print(COPPM);
+  USB.println(F(" ppm"));
+
   USB.print(F(" Temperature: "));
   USB.print(temperature);
   USB.println(F(" Celsius Degrees |"));
@@ -155,21 +173,6 @@ void Print_Sensors_Values(void)
   USB.print(pressure);
   USB.println(F(" Pa"));
 
-  //#ifdef MODE2 /* if we work on full demo, print CO information */
-  USB.print(F(" CO2 concentration estimated: "));
-  USB.print(CO2PPM);
-  USB.println(F(" ppm"));
-  #endif
-
-  USB.print(F(" CO concentration Estimated: "));
-  USB.print(COPPM);
-  USB.println(F(" ppm"));
-
-  #ifdef MODE2 /* if we work on full demo, print NO2 information */
-  USB.print(F(" NO2 concentration Estimated: "));
-  USB.print(NO2PPM);
-  USB.println(F(" ppm"));a
-  #endif
 }
 
 /*
@@ -183,18 +186,33 @@ void Create_Ascii(void)
   /* power up GPS */
   GPS.ON();
 
-  // load ephemeris previously stored in SD
+  /* load ephemeris previously stored in SD */
   GPS.loadEphems();
   
   status = GPS.waitForSignal(TIMEOUT);
 
   if( status == true )
   {
+    USB.println("creating new frame now");
+    
     /* Create new frame (ASCII) */
-    frame.createFrame(ASCII, node_ID);
+    frame.createFrame(BINARY); /* frame.createFrame(ASCII, node_ID) */
+
+    /**************MODE 2 ONLY******************/
+    #ifdef MODE2
+   
+    /* Add CO PPM value */
+    frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
+    
+    /* Add NO2 PPM value */
+    frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
+    
+    #endif
+    /**************MODE 2 ENDS******************/
   
-    #ifdef MODE2 /* if we work on full demo */
-    /***********************************************/
+    /* Add CO2 PPM value */
+    frame.addSensor(SENSOR_GASES_CO, COPPM);
+
     /* Add temperature */
     frame.addSensor(SENSOR_GASES_TC, temperature);
     
@@ -204,41 +222,16 @@ void Create_Ascii(void)
     /* Add pressure */
     frame.addSensor(SENSOR_GASES_PRES, pressure);
 
-    /* Add CO PPM value */
-    frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
-    
-    /* Add NO2 PPM value */
-    frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
-    /***********************************************/
-    #endif
-  
-    /* Add CO2 PPM value */
-    frame.addSensor(SENSOR_GASES_CO, COPPM);
-
     // add latitude and longtitude
     frame.addSensor(SENSOR_GPS, 
                     GPS.convert2Degrees(GPS.latitude, GPS.NS_indicator),
                     GPS.convert2Degrees(GPS.longitude, GPS.EW_indicator) );
 
-    //Add altitude [m]
-    frame.addSensor(SENSOR_ALTITUDE,GPS.altitude);
-    
-    //Add speed [km/h]
-    frame.addSensor(SENSOR_SPEED,GPS.speed);
-    
-    //Add course [degrees]
-    frame.addSensor(SENSOR_COURSE,GPS.course);
-
-    // update the ephemeris data
-    GPS.saveEphems();
-    
     /* turn off the GPS to save power */
     GPS.OFF();
-
-  
+    
     /* add timestamp from RTC */
     RTC.getTime();
-    delay(10);
     frame.addTimestamp();
   }
   
@@ -250,7 +243,7 @@ void Create_Ascii(void)
   /* save the frame to the SD card */
   memset(toWrite, 0x00, sizeof(toWrite) );
 
-  // Conversion from Binary to ASCII
+  /* Conversion from Binary to ASCII */
   Utils.hex2str( frame.buffer, toWrite, frame.length);
   
   /* some debug help here */
@@ -282,11 +275,11 @@ void Create_Ascii(void)
   
   /* reset values */
   COPPM = 0;
-  
-  #ifdef MODE2 /* if we work on full demo, clear other sensors */
   temperature = 0;
   humidity = 0;
   pressure = 0;
+  
+  #ifdef MODE2 /* if we work on full demo, clear other sensors */
   CO2PPM = 0;
   NO2PPM = 0;
   #endif
@@ -306,29 +299,29 @@ void read_logged_data_and_send(int index)
   /* open SD card */
   SD.ON();
   
-  // get number of lines in file
+  /* get number of lines in file */
   numLines = SD.numln(filename);
 
-  // get specified lines from file
-  // get only the last file line
+  /* get specified lines from file
+     get only the last file line*/
   startLine = index; 
   endLine = numLines;
 
-  // iterate to get the File lines specified
+  /* iterate to get the File lines specified */
   for( int i = startLine; i < endLine ; i++ )
   {  
-    // Get 'i' line -> SD.buffer
+    /* Get 'i' line -> SD.buffer */
     SD.catln( filename, i, 1); 
     
-    // initialize frameSD
+    /* initialize frameSD */
     memset(frameSD, 0x00, sizeof(frameSD) ); 
     
-    // conversion from ASCII to Binary 
+    /* conversion from ASCII to Binary */
     lengthSD = Utils.str2hex(SD.buffer, frameSD );
 
 
     /* not actually needed here -- just for debug */
-    // Conversion from ASCII to Binary
+    /* Conversion from ASCII to Binary */
     #ifdef PDEBUG
     USB.print(F("Get previously stored frame:"));
     #endif
@@ -351,7 +344,7 @@ void read_logged_data_and_send(int index)
 
     vehicle_speed = (int)GPS.speed;
   
-    if (vehicle_speed < 5) // vehicle has slowed down or not moving
+    if (vehicle_speed < 5) /* vehicle has slowed down or not moving */
     {
       /* here send the frame via XBEE */
       /* send the frame to anyone listening */
@@ -360,7 +353,7 @@ void read_logged_data_and_send(int index)
       // check TX flag
       if( error == 0 )
       {
-        transmission_index++; // update global variable
+        transmission_index++; /* update global variable */
         USB.println(F("send ok"));
       }
       else 
@@ -397,10 +390,10 @@ void read_logged_data_and_send(int index)
  */
 void setup_sd_card(void)
 {
-  // Set SD ON, to log samples
+  /* Set SD ON, to log samples */
   SD.ON();
 
-  // Delete file if already exists, to discard old samples
+  /* Delete file if already exists, to discard old samples */
   sd_answer = SD.del(filename);
 
   if(sd_answer) 
@@ -416,7 +409,7 @@ void setup_sd_card(void)
     #endif
   }
 
-  // create new file
+  /* create new file */
   sd_answer = SD.create(filename);
 
   if(sd_answer)
@@ -431,41 +424,8 @@ void setup_sd_card(void)
     USB.println(F("file not created"));
     #endif
   }
-}
 
-/*
- * 
- */
-void setup_rtc(void)
-{
-  /* Enable Real Time Clock */
-  RTC.ON();
-
-  // set GPS ON  
-  GPS.ON();
-
-  // load ephemeris previously stored in SD
-  GPS.loadEphems();
-  
-  /* wait for GPS signal for specific time */
-  status = GPS.waitForSignal(TIMEOUT);
-
-  /* if GPS is connected then set Time and Date to RTC */ 
-  if( status == true )
-  {    
-    // set time in RTC from GPS time (GMT time)
-    GPS.setTimeFromGPS();
-  }
-
-  /* at this point, compensate the time, to match the Greek time */
-  /* add 3 hours to the hour that was taken from the GPS */
-  RTC.setTime(RTC.year, RTC.month, RTC.date, RTC.dow(RTC.year, RTC.month, RTC.day), RTC.hour + 3, RTC.minute, RTC.second);
-
-  // update ephemeris
-  GPS.saveEphems();
-  
-  /* switch GPS off, to save power */
-  GPS.OFF();
+  USB.println("SD card was initialized");
 }
 
 /*
@@ -484,25 +444,30 @@ void setup_app_sensors(void)
   NO2Sensor.setCalibrationPoints(NO2res, NO2concentrations, numPoints);        /* for NO2 sensor */
   
   #endif
+
+  USB.println("Sensors were initialized");
 }
 
 /*
  * 
  */
-void setup_gps(void)
+void setup_gps_and_rtc(void)
 {
-  // define status variable for GPS connection
+  /* define status variable for GPS connection */
   bool status;
   
-  // Inits SD pins
+  /* Init SD pins */
   SD.ON();
 
-  // Turn GPS on
+  /* Turn GPS on */
   GPS.ON();
+
+  /* load ephemeris if applicable */
+  GPS.loadEphems();
   
-  ///////////////////////////////////////    
+  /////////////////////////////////////////    
   // wait for GPS signal for specific time
-  ////////////////////////////////////// 
+  ////////////////////////////////////////
   status = GPS.waitForSignal(TIMEOUT);
   
   //////////////////////////////////////////////////////////////////////// 
@@ -510,15 +475,27 @@ void setup_gps(void)
   //////////////////////////////////////////////////////////////////////// 
   if( status == true )
   {        
-      // store ephemeris in "EPHEM.TXT"
+      /* store ephemeris in "EPHEM.TXT" */
       GPS.saveEphems();
+
+      /* set time in RTC from GPS time (GMT time) */
+      GPS.setTimeFromGPS();
   }
 
-  // switch SD card off
+
+  /* at this point, compensate the time, to match the Greek time */
+  /* add 3 hours to the hour that was taken from the GPS */
+  RTC.setTime(RTC.year, RTC.month, RTC.date, RTC.dow(RTC.year, RTC.month, RTC.day), RTC.hour + 3, RTC.minute, RTC.second);
+  
+  /* switch SD card off */
   SD.OFF();
   
-  // switch GPS off
+  /* switch GPS off */
   GPS.OFF();
+
+  USB.println("GPS was initialized");
+
+  USB.println("RTC was initialized");
 }
 
  /*
@@ -605,6 +582,9 @@ void run_application(void)
     /* if a day has passed, send the logged data to Meshlium */
     if(check_the_date() == true)
     {
+      /* power up SD card */
+      SD.ON();
+      
       /* power up the GPS */
       GPS.ON();
 
@@ -614,11 +594,11 @@ void run_application(void)
       /* send the data to Meshlium */
       read_logged_data_and_send(transmission_index);
 
-      /* update the ephemeris */
-      GPS.saveEphems();
-
       /* close the GPS module */
       GPS.OFF();
+
+      /* close SD card */
+      SD.OFF();
     }
 }
 
@@ -629,6 +609,9 @@ void Send_Data(void)
 {
   /* speed variable will check if the vehicle is moving or not */
   int vehicle_speed = 0;
+
+  /* power up SD card */
+  SD.ON();
   
   /* power up GPS */
   GPS.ON();
@@ -651,22 +634,23 @@ void Send_Data(void)
     else
     {
       /**** we are moving , abort transmission ****/
-      /* update ephemeris data */
-      GPS.saveEphems();
 
       /* close the GPS module */
       GPS.OFF();
 
+      /* close SD card */
+      SD.OFF();
+  
       /* return to other code execution */
       return;
     }
   }
 
-  /* update ephemeris data */
-  GPS.saveEphems();
-
   /* close the GPS module */
   GPS.OFF();
+
+  /* close SD card */
+  SD.OFF();
 }
 
  /*
@@ -681,3 +665,32 @@ void ninety_seconds_delay(void)
     delay(1000);
   }
 }
+
+/*
+ * 
+ */
+ void see_battery_status(void)
+ {
+    bool chargeState;
+    uint16_t chargeCurrent;
+
+    /* get charging state and current */
+    chargeState = PWR.getChargingState();
+    chargeCurrent = PWR.getBatteryCurrent();
+
+    if (chargeState == true)
+    {
+      USB.println(F("Battery is charging"));
+    }
+    else
+    {
+      USB.println(F("Battery is not charging"));
+    }
+
+    /* Show the battery charging current (only from solar panel) */
+    USB.print(F("Battery charging current (only from solar panel): "));
+    USB.print(chargeCurrent, DEC);
+    USB.println(F(" mA"));
+
+    USB.println();
+ }
