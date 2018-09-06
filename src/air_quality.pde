@@ -37,7 +37,7 @@ void setup()
   setup_gps_and_rtc();
   
   #ifdef PDEBUG
-  USB.println("starting application now");
+  USB.println(F("starting application now"));
   #endif
 }
 
@@ -193,10 +193,8 @@ void Create_Ascii(void)
 
   if( status == true )
   {
-    USB.println("creating new frame now");
-    
     /* Create new frame (ASCII) */
-    frame.createFrame(BINARY); /* frame.createFrame(ASCII, node_ID) */
+    frame.createFrame(ASCII); /* frame.createFrame(ASCII, node_ID) */
 
     /**************MODE 2 ONLY******************/
     #ifdef MODE2
@@ -222,52 +220,94 @@ void Create_Ascii(void)
     /* Add pressure */
     frame.addSensor(SENSOR_GASES_PRES, pressure);
 
-    // add latitude and longtitude
-    frame.addSensor(SENSOR_GPS, 
-                    GPS.convert2Degrees(GPS.latitude, GPS.NS_indicator),
-                    GPS.convert2Degrees(GPS.longitude, GPS.EW_indicator) );
-
-    /* turn off the GPS to save power */
-    GPS.OFF();
-    
-    /* add timestamp from RTC */
+    /*  get the actual time from thr RTC */
     RTC.getTime();
+
+    /* add the timestamp to the samples */
     frame.addTimestamp();
-  }
-  
-  /* Show the frame if we are in debuf mode*/
-  #ifdef PDEBUG
-  frame.showFrame();
-  #endif
 
-  /* save the frame to the SD card */
-  memset(toWrite, 0x00, sizeof(toWrite) );
-
-  /* Conversion from Binary to ASCII */
-  Utils.hex2str( frame.buffer, toWrite, frame.length);
-  
-  /* some debug help here */
-  #ifdef PDEBUG
-  USB.print(F("Frame to be stored:"));
-  USB.println(toWrite);
-  #endif
-
-  /* now append data to file */
-  sd_answer = SD.appendln(filename, toWrite);
-  
-  if( sd_answer == 1 )
-  {
+    /* print the frame for debug reasons */
     #ifdef PDEBUG
-    USB.println(F("Frame appended to file"));
+    frame.showFrame();
     #endif
-  }
-  else 
-  {
-    #ifdef PDEBUG
-    USB.println(F("Append failed"));
-    #endif
-  }
 
+    /********* store these samples to the dedicated file ********/
+    /************************************************************/
+    /* save the frame to the SD card now */
+    /* init the buffer that will hold the frame info */
+    memset(toWrite, 0x00, sizeof(toWrite) );
+
+    /* Conversion from Binary to ASCII */
+    Utils.hex2str( frame.buffer, toWrite, frame.length);
+  
+    /* some debug help here */
+    #ifdef PDEBUG
+    USB.print(F("Frame to be stored:"));
+    USB.println(toWrite);
+    #endif
+
+    /* now append data to file */
+    sd_answer = SD.appendln(filename, toWrite);
+  
+    if( sd_answer == 1 )
+    {
+        #ifdef PDEBUG
+        USB.println(F("Frame WITHOUT GPS appended to file"));
+        #endif
+    }
+    else 
+    {
+        #ifdef PDEBUG
+        USB.println(F("Append of data WITHOUT GPS failed"));
+        #endif
+    }
+
+    /********* store the GPS coordinates to the dedicated file now ********/
+    /**********************************************************************/
+
+    /* first, create a new frame that will hold the GPS coordinates */
+    frame.createFrame(ASCII);
+
+    /* now add the coordinates */
+    frame.addSensor(SENSOR_GPS, 
+                          GPS.convert2Degrees(GPS.latitude, GPS.NS_indicator),
+                          GPS.convert2Degrees(GPS.longitude, GPS.EW_indicator) );
+
+    /* now add the same timestamp */
+    frame.addTimestamp();
+
+    /* print the frame for debug reasons */
+    #ifdef PDEBUG
+    frame.showFrame();
+    #endif
+
+    /* save the frame to the SD card  now */
+    /* init the buffer that will hold the frame info */
+    memset(toWrite, 0x00, sizeof(toWrite) );
+
+    /* Conversion from Binary to ASCII */
+    Utils.hex2str( frame.buffer, toWrite, frame.length);
+  
+    /* some debug help here */
+    USB.print(F("Frame to be stored:"));
+    USB.println(toWrite);
+
+    /* now append data to file */
+    sd_answer = SD.appendln(filename_gps, toWrite);
+  
+    if( sd_answer == 1 )
+    {
+        #ifdef PDEBUG
+        USB.println(F("Frame WITH GPS appended to file"));
+        #endif
+    }
+    else 
+    {
+        #ifdef PDEBUG
+        USB.println(F("Append of data WITH GPS failed"));
+        #endif
+    }
+  }
 
   /* close SD */
   SD.OFF();
@@ -283,6 +323,105 @@ void Create_Ascii(void)
   CO2PPM = 0;
   NO2PPM = 0;
   #endif
+}
+
+/*
+ * 
+ */
+void read_gps_coordinates_and_send(int index)
+{
+  /* speed variable will check if the vehicle is moving or not */
+  int vehicle_speed = 0;
+  
+  /* init XBee */
+  xbee868LP.ON();
+
+  /* open SD card */
+  SD.ON();
+  
+  /* get number of lines in file */
+  numLines = SD.numln(filename_gps);
+
+  /* get specified lines from file
+     get only the last file line*/
+  startLine = index - 1; /* -1 here, because it has been updated already by the read_logged_data_and_send() function */
+  endLine = numLines;
+
+  /* iterate to get the File lines specified */
+  for( int i = startLine; i < endLine ; i++ )
+  {  
+    /* Get 'i' line -> SD.buffer */
+    SD.catln( filename_gps, i, 1); 
+    
+    /* initialize frameSD */
+    memset(frameSD, 0x00, sizeof(frameSD) ); 
+    
+    /* conversion from ASCII to Binary */
+    lengthSD = Utils.str2hex(SD.buffer, frameSD );
+
+
+    /* not actually needed here -- just for debug */
+    /* Conversion from ASCII to Binary */
+    #ifdef PDEBUG
+    USB.print(F("Get previously stored GPS frame:"));
+    #endif
+    
+    for(int j = 0; j < lengthSD; j++)
+    { 
+      #ifdef PDEBUG   
+      USB.print(frameSD[j],BYTE);
+      #endif
+    }
+    #ifdef PDEBUG
+    USB.println();
+    #endif
+    
+    /************************************************
+    * At this point 'frameSD' and 'lengthSD' can be 
+    * used as 'frame.buffer' and 'frame.length' to 
+    * send information via some communication module 
+    *************************************************/
+
+    vehicle_speed = (int)GPS.speed;
+  
+    if (vehicle_speed < 5) /* vehicle has slowed down or not moving */
+    {
+      /* here send the frame via XBEE */
+      /* send the frame to anyone listening */
+      error = xbee868LP.send( MESHLIUM_ADDRESS, frameSD, lengthSD );
+
+      // check TX flag
+      if( error == 0 )
+      {
+        USB.println(F("send GPS ok"));
+      }
+      else 
+      {
+        USB.println(F("send GPS error"));
+      }
+    }
+    else
+    {
+      /**** if we are moving, abort transmission ****/
+    
+      /* close SD card */
+      SD.OFF();
+  
+      /* turn ZigBee off, to save power */
+      xbee868LP.OFF();
+    
+      /* return to other code execution */
+      return;
+    }
+    
+  }
+  
+  /**** transmission ended, close modules ****/
+  /* close SD card */
+  SD.OFF();
+ 
+  /* turn ZigBee off, to save power */
+  xbee868LP.OFF();
 }
 
 /*
@@ -393,19 +532,20 @@ void setup_sd_card(void)
   /* Set SD ON, to log samples */
   SD.ON();
 
+  /* DELETE FILE WITH SAMPLES */
   /* Delete file if already exists, to discard old samples */
   sd_answer = SD.del(filename);
 
   if(sd_answer) 
   {
     #ifdef PDEBUG
-    USB.println(F("file deleted"));
+    USB.println(F("file containing samples deleted"));
     #endif
   }
   else 
   {
     #ifdef PDEBUG
-    USB.println(F("file NOT deleted"));
+    USB.println(F("file containing samples NOT deleted"));
     #endif
   }
 
@@ -415,17 +555,51 @@ void setup_sd_card(void)
   if(sd_answer)
   { 
     #ifdef PDEBUG
-    USB.println(F("file created"));
+    USB.println(F("file containing samples created"));
     #endif
   }
   else
   {
     #ifdef PDEBUG
-    USB.println(F("file not created"));
+    USB.println(F("file containing samples NOT created"));
+    #endif
+  }
+  /***********************************************************/
+
+  /* DELETE FILE WITH GPS */
+  /* Delete file if already exists, to discard old samples */
+  sd_answer = SD.del(filename_gps);
+
+  if(sd_answer) 
+  {
+    #ifdef PDEBUG
+    USB.println(F("file containing GPS coordinates deleted"));
+    #endif
+  }
+  else 
+  {
+    #ifdef PDEBUG
+    USB.println(F("file containing GPS coordinates NOT deleted"));
     #endif
   }
 
-  USB.println("SD card was initialized");
+  /* create new file */
+  sd_answer = SD.create(filename_gps);
+
+  if(sd_answer)
+  { 
+    #ifdef PDEBUG
+    USB.println(F("file containing GPS coordinates created"));
+    #endif
+  }
+  else
+  {
+    #ifdef PDEBUG
+    USB.println(F("file containing GPS coordinates NOT created"));
+    #endif
+  }
+  
+  USB.println(F("SD card was initialized"));
 }
 
 /*
@@ -445,7 +619,7 @@ void setup_app_sensors(void)
   
   #endif
 
-  USB.println("Sensors were initialized");
+  USB.println(F("Sensors were initialized"));
 }
 
 /*
@@ -462,8 +636,20 @@ void setup_gps_and_rtc(void)
   /* Turn GPS on */
   GPS.ON();
 
-  /* load ephemeris if applicable */
-  GPS.loadEphems();
+  sd_answer = SD.del("EPHEM.TXTT");
+
+  if(sd_answer) 
+  {
+    #ifdef PDEBUG
+    USB.println(F("file containing ephemeries deleted"));
+    #endif
+  }
+  else 
+  {
+    #ifdef PDEBUG
+    USB.println(F("file containing ephemeries NOT deleted"));
+    #endif
+  }
   
   /////////////////////////////////////////    
   // wait for GPS signal for specific time
@@ -493,9 +679,9 @@ void setup_gps_and_rtc(void)
   /* switch GPS off */
   GPS.OFF();
 
-  USB.println("GPS was initialized");
+  USB.println(F("GPS was initialized"));
 
-  USB.println("RTC was initialized");
+  USB.println(F("RTC was initialized"));
 }
 
  /*
@@ -591,8 +777,11 @@ void run_application(void)
       /* load ephemeris */
       GPS.loadEphems();
 
-      /* send the data to Meshlium */
+      /* send the samples to Meshlium */
       read_logged_data_and_send(transmission_index);
+
+      /* send the coordinates of the sent sample to Meshlium */
+      read_gps_coordinates_and_send(transmission_index);
 
       /* close the GPS module */
       GPS.OFF();
@@ -628,8 +817,11 @@ void Send_Data(void)
 
     if (vehicle_speed < 5) // vehicle has slowed down or not moving
     {
-      /* now it is a good time to check if there is a Zigbee Meshlium nearby */
+      /* now it is a good time to check if there is a Zigbee Meshlium nearby and send it samples */
       read_logged_data_and_send(transmission_index);
+
+      /* send the coordinates of the sent sample to Meshlium */
+      read_gps_coordinates_and_send(transmission_index);
     }
     else
     {

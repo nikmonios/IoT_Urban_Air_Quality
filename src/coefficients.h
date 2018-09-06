@@ -35,7 +35,7 @@
 /**** GLOBAL & DEFINES ****/
 float NO2PPM = 0;    /* Stores the NO2 value */
 float COPPM = 0;    /* Stores the CO value */
-float temperature = 0; /* Stores the temperature in ºC */
+float temperature = 0; /* Stores the temperature in ?C */
 float humidity = 0;     /* Stores the realitve humidity in %RH */
 float pressure = 0;    /* Stores the pressure in Pa */
 float CO2PPM = 0; /* stores the CO2 value */
@@ -57,7 +57,8 @@ float CO2voltages[] =        { POINT1_VOLT_CO2, POINT2_VOLT_CO2, POINT3_VOLT_CO2
 
 
 /* node ID */
-char node_ID[] = "Board_Complete";
+char node_ID[] = "node1_data";
+char node_gps[] = "node1_gps";
 
 /* 
  *  a unit that updates every 8 seconds
@@ -66,7 +67,7 @@ char node_ID[] = "Board_Complete";
 uint16_t timer_unit = 0;
 
 uint16_t sample_time_day = 4;
-uint16_t sample_time_night = 4;
+uint16_t sample_time_night = 10;
 
 /* Destination Meshlium MAC address */
 //////////////////////////////////////////
@@ -86,6 +87,8 @@ bool status;
 /* variables for data logging */
 /* define file name: MUST be 8.3 SHORT FILE NAME */
 char filename[]="FILE1.TXT";
+/* define file name for GPS coordinates logging */
+char filename_gps[] = "GPSDATA.TXT";
 
 /* buffer to write into Sd File */
 char toWrite[256];
