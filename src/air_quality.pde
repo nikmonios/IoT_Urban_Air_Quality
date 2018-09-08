@@ -1,10 +1,15 @@
-/*
+/*******************************************************************
     example woth board no.1.
 
-    This board has the NO2 and the Temp-Hum-Press sensors on it.
+    This board has the CO and the Temp-Hum-Press sensors on it.
 
-    Read sensors and print them to Serial Screen
-*/
+    Debug Mode -> prints info to serial as well
+
+
+    Author: Nikolaos Monios , moniosni@gmail.com
+
+    MSc. Thesis for the University of West Attika
+*******************************************************************/
 
 #include <WaspSensorGas_v30.h>
 #include <WaspFrame.h>
@@ -13,9 +18,7 @@
 #include "coefficients.h"
 
 #define PDEBUG 1   /* enable serial print for debug reasons */
-/*#define MODE2  1*/    /* mode 2, when enabled, will read all sensors */
-
-int daytime_mode;
+/*#define MODE2  1*/    /* mode 2, when enabled, will read more sensors */
 
 void setup()
 {
@@ -108,39 +111,64 @@ void loop()
 /******************************* FUNCTIONS *******************************/
 
 /*
- * 
+ * Function: Read_Sensors
+ * ----------------------
+ *    Reads all the sensors of the application,
+ *    and stores their values to global variables
+ *    (CO2, NO2, Temperature etc)
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void Read_Sensors(void)
 {
-  /**************MODE 2 ONLY*********************/
-  #ifdef MODE2
+  /* Start the GPS*/
+  GPS.ON();
+
+  /* load ephemeris previously stored in SD */
+  GPS.loadEphems();
   
-  /*                READ CO2                    */
-  CO2PPM = CO2Sensor.readConcentration();
-  /**********************************************/
+  status = GPS.waitForSignal(TIMEOUT); /* wait some time for the GPS to connect */
+
+  if( status == true ) /* if connection was established, read the sensors */
+  {
+    /**************MODE 2 ONLY*********************/
+    #ifdef MODE2
   
-  /*                READ NO2                    */
-  NO2PPM = NO2Sensor.readConcentration();
-  #endif
-  /***************MODE 2 ENDS*********************/
+    /*                READ CO2                    */
+    CO2PPM = CO2Sensor.readConcentration();
+    /**********************************************/
+  
+    /*                READ NO2                    */
+    NO2PPM = NO2Sensor.readConcentration();
+    #endif
+    /***************MODE 2 ENDS*********************/
 
 
-  /* READ TEMPERATURE, HUMIDITY, PRESSURE        */
-  temperature = Gases.getTemperature();
-  delay(100);
-  humidity = Gases.getHumidity();
-  delay(100);
-  pressure = Gases.getPressure();
-  delay(100);
+    /* READ TEMPERATURE, HUMIDITY, PRESSURE        */
+    temperature = Gases.getTemperature();
+    delay(100);
+    humidity = Gases.getHumidity();
+    delay(100);
+    pressure = Gases.getPressure();
+    delay(100);
   
-  /*                READ CO                      */
-  COPPM = COSensor.readConcentration();
-  /***********************************************/
-
+    /*                READ CO                      */
+    COPPM = COSensor.readConcentration();
+    /***********************************************/
+  }
 }
 
 /*
- * 
+ * Function: Print_Sensors_Values
+ * ------------------------------
+ *    Prints the values of the sensors
+ *    to Serial Monitor, in Debug mode
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void Print_Sensors_Values(void)
 {
@@ -176,139 +204,139 @@ void Print_Sensors_Values(void)
 }
 
 /*
- * 
+ * Function: Create_Ascii
+ * ----------------------
+ *    Add the values of the sensors
+ *    to the frame, and write the frame
+ *    to the SD card
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void Create_Ascii(void)
 {
   /* power up SD card */
   SD.ON();
   
-  /* power up GPS */
-  GPS.ON();
+  /* Create new frame (ASCII) */
+  frame.createFrame(ASCII); /* frame.createFrame(ASCII, node_ID) */
 
-  /* load ephemeris previously stored in SD */
-  GPS.loadEphems();
-  
-  status = GPS.waitForSignal(TIMEOUT);
-
-  if( status == true )
-  {
-    /* Create new frame (ASCII) */
-    frame.createFrame(ASCII); /* frame.createFrame(ASCII, node_ID) */
-
-    /**************MODE 2 ONLY******************/
-    #ifdef MODE2
+  /**************MODE 2 ONLY******************/
+  #ifdef MODE2
    
-    /* Add CO PPM value */
-    frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
+  /* Add CO PPM value */
+  frame.addSensor(SENSOR_GASES_CO2, CO2PPM);
     
-    /* Add NO2 PPM value */
-    frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
+  /* Add NO2 PPM value */
+  frame.addSensor(SENSOR_GASES_NO2, NO2PPM);
     
-    #endif
-    /**************MODE 2 ENDS******************/
+  #endif
+  /**************MODE 2 ENDS******************/
   
-    /* Add CO2 PPM value */
-    frame.addSensor(SENSOR_GASES_CO, COPPM);
+  /* Add CO2 PPM value */
+  frame.addSensor(SENSOR_GASES_CO, COPPM);
 
-    /* Add temperature */
-    frame.addSensor(SENSOR_GASES_TC, temperature);
+  /* Add temperature */
+  frame.addSensor(SENSOR_GASES_TC, temperature);
     
-    /* Add humidity */
-    frame.addSensor(SENSOR_GASES_HUM, humidity);
+  /* Add humidity */
+  frame.addSensor(SENSOR_GASES_HUM, humidity);
     
-    /* Add pressure */
-    frame.addSensor(SENSOR_GASES_PRES, pressure);
+  /* Add pressure */
+  frame.addSensor(SENSOR_GASES_PRES, pressure);
 
-    /*  get the actual time from thr RTC */
-    RTC.getTime();
+  /*  get the actual time from thr RTC */
+  RTC.getTime();
 
-    /* add the timestamp to the samples */
-    frame.addTimestamp();
+  /* add the timestamp to the samples */
+  frame.addTimestamp();
 
-    /* print the frame for debug reasons */
-    #ifdef PDEBUG
-    frame.showFrame();
-    #endif
+  /* print the frame for debug reasons */
+  #ifdef PDEBUG
+  frame.showFrame();
+  #endif
 
-    /********* store these samples to the dedicated file ********/
-    /************************************************************/
-    /* save the frame to the SD card now */
-    /* init the buffer that will hold the frame info */
-    memset(toWrite, 0x00, sizeof(toWrite) );
+  /********* store these samples to the dedicated file ********/
+  /************************************************************/
+  /* save the frame to the SD card now */
+  /* init the buffer that will hold the frame info */
+  memset(toWrite, 0x00, sizeof(toWrite) );
 
-    /* Conversion from Binary to ASCII */
-    Utils.hex2str( frame.buffer, toWrite, frame.length);
+  /* Conversion from Binary to ASCII */
+  Utils.hex2str( frame.buffer, toWrite, frame.length);
   
-    /* some debug help here */
-    #ifdef PDEBUG
-    USB.print(F("Frame to be stored:"));
-    USB.println(toWrite);
-    #endif
+  /* some debug help here */
+  #ifdef PDEBUG
+  USB.print(F("Frame to be stored:"));
+  USB.println(toWrite);
+  #endif
 
-    /* now append data to file */
-    sd_answer = SD.appendln(filename, toWrite);
+  /* now append data to file */
+  sd_answer = SD.appendln(filename, toWrite);
   
-    if( sd_answer == 1 )
-    {
-        #ifdef PDEBUG
-        USB.println(F("Frame WITHOUT GPS appended to file"));
-        #endif
-    }
-    else 
-    {
-        #ifdef PDEBUG
-        USB.println(F("Append of data WITHOUT GPS failed"));
-        #endif
-    }
+  if( sd_answer == 1 )
+  {
+      #ifdef PDEBUG
+      USB.println(F("Frame WITHOUT GPS appended to file"));
+      #endif
+  }
+  else 
+  {
+      #ifdef PDEBUG
+      USB.println(F("Append of data WITHOUT GPS failed"));
+      #endif
+  }
 
-    /********* store the GPS coordinates to the dedicated file now ********/
-    /**********************************************************************/
+  /********* store the GPS coordinates to the dedicated file now ********/
+  /**********************************************************************/
 
-    /* first, create a new frame that will hold the GPS coordinates */
-    frame.createFrame(ASCII);
+  /* first, create a new frame that will hold the GPS coordinates */
+  frame.createFrame(ASCII);
 
-    /* now add the coordinates */
-    frame.addSensor(SENSOR_GPS, 
+  /* now add the coordinates */
+  frame.addSensor(SENSOR_GPS, 
                           GPS.convert2Degrees(GPS.latitude, GPS.NS_indicator),
                           GPS.convert2Degrees(GPS.longitude, GPS.EW_indicator) );
 
-    /* now add the same timestamp */
-    frame.addTimestamp();
+  /* now add the same timestamp */
+  frame.addTimestamp();
 
-    /* print the frame for debug reasons */
-    #ifdef PDEBUG
-    frame.showFrame();
-    #endif
+  /* print the frame for debug reasons */
+  #ifdef PDEBUG
+  frame.showFrame();
+  #endif
 
-    /* save the frame to the SD card  now */
-    /* init the buffer that will hold the frame info */
-    memset(toWrite, 0x00, sizeof(toWrite) );
+  /* save the frame to the SD card  now */
+  /* init the buffer that will hold the frame info */
+  memset(toWrite, 0x00, sizeof(toWrite) );
 
-    /* Conversion from Binary to ASCII */
-    Utils.hex2str( frame.buffer, toWrite, frame.length);
+  /* Conversion from Binary to ASCII */
+  Utils.hex2str( frame.buffer, toWrite, frame.length);
   
-    /* some debug help here */
-    USB.print(F("Frame to be stored:"));
-    USB.println(toWrite);
+  /* some debug help here */
+  USB.print(F("Frame to be stored:"));
+  USB.println(toWrite);
 
-    /* now append data to file */
-    sd_answer = SD.appendln(filename_gps, toWrite);
+  /* now append data to file */
+  sd_answer = SD.appendln(filename_gps, toWrite);
   
-    if( sd_answer == 1 )
-    {
-        #ifdef PDEBUG
-        USB.println(F("Frame WITH GPS appended to file"));
-        #endif
-    }
-    else 
-    {
-        #ifdef PDEBUG
-        USB.println(F("Append of data WITH GPS failed"));
-        #endif
-    }
+  if( sd_answer == 1 )
+  {
+      #ifdef PDEBUG
+      USB.println(F("Frame WITH GPS appended to file"));
+      #endif
+  }
+  else 
+  {
+      #ifdef PDEBUG
+      USB.println(F("Append of data WITH GPS failed"));
+      #endif
   }
 
+  /* close GPS - it has been on since the Read_Sensors() was called */
+  GPS.OFF();
+  
   /* close SD */
   SD.OFF();
 
@@ -326,7 +354,17 @@ void Create_Ascii(void)
 }
 
 /*
- * 
+ * Function: read_gps_coordinates_and_send
+ * ---------------------------------------
+ *    Parses the SD card for the GPS coordinates
+ *    that need to be sent to the Meshlium,
+ *    and sends them using XBee
+ *    
+ *    Input:  index
+ *            Indicates the line of the file
+ *            containing the coordinates
+ *    
+ *    Output: none
  */
 void read_gps_coordinates_and_send(int index)
 {
@@ -344,7 +382,7 @@ void read_gps_coordinates_and_send(int index)
 
   /* get specified lines from file
      get only the last file line*/
-  startLine = index - 1; /* -1 here, because it has been updated already by the read_logged_data_and_send() function */
+  startLine = index;
   endLine = numLines;
 
   /* iterate to get the File lines specified */
@@ -393,6 +431,7 @@ void read_gps_coordinates_and_send(int index)
       // check TX flag
       if( error == 0 )
       {
+        transmission_index++; /* update global variable */
         USB.println(F("send GPS ok"));
       }
       else 
@@ -425,7 +464,17 @@ void read_gps_coordinates_and_send(int index)
 }
 
 /*
- * 
+ * Function: read_logged_data_and_send
+ * -----------------------------------
+ *    Parses the SD card for the values of
+ *    the sensors that need to be sent to 
+ *    the Meshlium, and sends them using XBee
+ *    
+ *    Input:  index
+ *            Indicates the line of the file
+ *            containing the coordinates
+ *    
+ *    Output: none
  */
 void read_logged_data_and_send(int index)
 {
@@ -492,7 +541,6 @@ void read_logged_data_and_send(int index)
       // check TX flag
       if( error == 0 )
       {
-        transmission_index++; /* update global variable */
         USB.println(F("send ok"));
       }
       else 
@@ -525,7 +573,15 @@ void read_logged_data_and_send(int index)
 }
 
 /*
- * 
+ * Function: setup_sd_card
+ * -----------------------
+ *    Deletes old files and creates
+ *    new files for logging the data
+ *    from the sensors and the GPS
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void setup_sd_card(void)
 {
@@ -603,7 +659,15 @@ void setup_sd_card(void)
 }
 
 /*
- * 
+ * Function: setup_app_sensors
+ * ---------------------------
+ *    Calculates the logarithmic functions
+ *    that are going to be used by non-linear
+ *    sensors
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void setup_app_sensors(void)
 {
@@ -623,7 +687,17 @@ void setup_app_sensors(void)
 }
 
 /*
- * 
+ * Function: setup_gps_and_rtc
+ * ---------------------------
+ *    Starts the GPS and stores the
+ *    Ephemeris information to the SD card
+ *    so it can start faster during the
+ *    application. Sets the real time and 
+ *    date to the RTC
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void setup_gps_and_rtc(void)
 {
@@ -635,21 +709,6 @@ void setup_gps_and_rtc(void)
 
   /* Turn GPS on */
   GPS.ON();
-
-  sd_answer = SD.del("EPHEM.TXTT");
-
-  if(sd_answer) 
-  {
-    #ifdef PDEBUG
-    USB.println(F("file containing ephemeries deleted"));
-    #endif
-  }
-  else 
-  {
-    #ifdef PDEBUG
-    USB.println(F("file containing ephemeries NOT deleted"));
-    #endif
-  }
   
   /////////////////////////////////////////    
   // wait for GPS signal for specific time
@@ -664,28 +723,43 @@ void setup_gps_and_rtc(void)
       /* store ephemeris in "EPHEM.TXT" */
       GPS.saveEphems();
 
+      #ifdef PDEBUG
+      USB.println(F("Ephemeries were saved in a file"));
+      #endif
+
       /* set time in RTC from GPS time (GMT time) */
       GPS.setTimeFromGPS();
+
+      /* at this point, compensate the time, to match the Greek time */
+      /* add 3 hours to the hour that was taken from the GPS */
+      RTC.setTime(RTC.year, RTC.month, RTC.date, RTC.dow(RTC.year, RTC.month, RTC.day), RTC.hour + 3, RTC.minute, RTC.second);
+  
+      /* switch SD card off */
+      SD.OFF();
+  
+      /* switch GPS off */
+      GPS.OFF();
+
+      USB.println(F("GPS was initialized"));
+
+      USB.println(F("RTC was initialized"));
+
+      check_the_date(); /* update the date, we do not want to have the initialized values - maybe the app will start during the night */
   }
 
-
-  /* at this point, compensate the time, to match the Greek time */
-  /* add 3 hours to the hour that was taken from the GPS */
-  RTC.setTime(RTC.year, RTC.month, RTC.date, RTC.dow(RTC.year, RTC.month, RTC.day), RTC.hour + 3, RTC.minute, RTC.second);
-  
-  /* switch SD card off */
-  SD.OFF();
-  
-  /* switch GPS off */
-  GPS.OFF();
-
-  USB.println(F("GPS was initialized"));
-
-  USB.println(F("RTC was initialized"));
 }
 
  /*
- * 
+ * Function: check_the_date
+ * ------------------------
+ *    Checks if a day has passed since
+ *    we started the application. Checks
+ *    if it is day or night outside
+ *    
+ *    Input:  none
+ *    
+ *    Output: TRUE    if a day has passed
+ *            FALSE   if no day has passed
  */
 bool check_the_date(void)
 {
@@ -695,7 +769,7 @@ bool check_the_date(void)
   /* see the day (eg. is it Monday, Tuesday etc.) */
   char* Date = strtok(RTC.getTime(),",");
 
-  if(strcmp(Date, temp_day)) /* if the day hasn't changed, don't update the flag */
+  if(strcmp(Date, temp_day) == 0) /* if the day hasn't changed, don't update the flag */
   {
     day_flag_updated = false;
   }
@@ -729,7 +803,17 @@ bool check_the_date(void)
 }
 
 /*
- * 
+ * Function: run_application
+ * -------------------------
+ *    Starts the sensor board. Starts the sensors
+ *    and wait 90 seconds for them to warm up.
+ *    Reads samples from sensors, stores them
+ *    to frames and send them via XBee if
+ *    necessary.
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void run_application(void)
 {
@@ -775,7 +859,7 @@ void run_application(void)
       GPS.ON();
 
       /* load ephemeris */
-      GPS.loadEphems();
+      /* GPS.loadEphems(); */
 
       /* send the samples to Meshlium */
       read_logged_data_and_send(transmission_index);
@@ -792,7 +876,14 @@ void run_application(void)
 }
 
 /*
- * 
+ * Function: Send_Data
+ * -------------------
+ *    If the bus is not moving,
+ *    send frames via XBee
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
 void Send_Data(void)
 {
@@ -806,7 +897,7 @@ void Send_Data(void)
   GPS.ON();
 
   // load ephemeris previously stored in SD
-  GPS.loadEphems();
+  /* GPS.loadEphems(); */
   
   status = GPS.waitForSignal(TIMEOUT);
 
@@ -846,8 +937,15 @@ void Send_Data(void)
 }
 
  /*
-  * 
-  */
+ * Function: ninety_seconds_delay
+ * ------------------------------
+ *    waits 90 seconds for the gases
+ *    sensors to warm up
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
+ */
 void ninety_seconds_delay(void)
 {
   uint8_t i = 0; /* 90 seconds counter */
@@ -859,7 +957,15 @@ void ninety_seconds_delay(void)
 }
 
 /*
- * 
+ * Function: see_battery_status
+ * ----------------------------
+ *    If we are in debug mode, print
+ *    to the serial monitor the status
+ *    of the battery
+ *    
+ *    Input:  none
+ *    
+ *    Output: none
  */
  void see_battery_status(void)
  {

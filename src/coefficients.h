@@ -35,7 +35,7 @@
 /**** GLOBAL & DEFINES ****/
 float NO2PPM = 0;    /* Stores the NO2 value */
 float COPPM = 0;    /* Stores the CO value */
-float temperature = 0; /* Stores the temperature in ?C */
+float temperature = 0; /* Stores the temperature in ºC */
 float humidity = 0;     /* Stores the realitve humidity in %RH */
 float pressure = 0;    /* Stores the pressure in Pa */
 float CO2PPM = 0; /* stores the CO2 value */
@@ -66,8 +66,8 @@ char node_gps[] = "node1_gps";
  *  take measurements. */
 uint16_t timer_unit = 0;
 
-uint16_t sample_time_day = 4;
-uint16_t sample_time_night = 10;
+uint16_t sample_time_day = 45;
+uint16_t sample_time_night = 450;
 
 /* Destination Meshlium MAC address */
 //////////////////////////////////////////
@@ -95,9 +95,7 @@ char toWrite[256];
 
 /* define variables to read stored frames */
 uint8_t frameSD[MAX_FRAME+1];
-
 uint16_t lengthSD;
-
 int32_t numLines;
 
 /* variables to define the file lines to be read */
@@ -118,5 +116,8 @@ char* temp_day = "Mon";
 
 /* an index that shows which sample inside the .txt file is next to be sent */
 int transmission_index = 0;
+
+/* variable to store whether we are operating during the day or during the night */
+int daytime_mode;
 
 #endif
