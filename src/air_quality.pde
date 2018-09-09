@@ -31,13 +31,13 @@ void setup()
   frame.setID(node_ID);
 
   /* setup the sensors that will be used in this application */
-  setup_app_sensors();
+  Setup_App_Sensors();
 
   /* setup the SD card */
-  setup_sd_card();
+  Setup_SD_Card();
 
   /* setup the GPS and RTC modules */
-  setup_gps_and_rtc();
+  Setup_GPS_And_RTC();
   
   #ifdef PDEBUG
   USB.println(F("starting application now"));
@@ -80,11 +80,11 @@ void loop()
       /* run the application only if there is sufficient power ( > 15% ) */
       if(power_level >= 15)
       {
-        run_application(); /* main routine */
+        Run_Application(); /* main routine */
 
         /* check if battery is charging from solar panel, in debug mode */
         #ifdef PDEBUG
-        see_battery_status();
+        See_Battery_Status();
         #endif
       }
     }
@@ -101,7 +101,7 @@ void loop()
       /* run the application only if there is sufficient power ( > 15% ) */
       if(power_level >= 15)
       {
-        run_application(); /* main routine */
+        Run_Application(); /* main routine */
       }
     }
   }
@@ -354,7 +354,7 @@ void Create_Ascii(void)
 }
 
 /*
- * Function: read_gps_coordinates_and_send
+ * Function: Read_GPS_Coordinates_And_Send
  * ---------------------------------------
  *    Parses the SD card for the GPS coordinates
  *    that need to be sent to the Meshlium,
@@ -366,7 +366,7 @@ void Create_Ascii(void)
  *    
  *    Output: none
  */
-void read_gps_coordinates_and_send(int index)
+void Read_GPS_Coordinates_And_Send(int index)
 {
   /* speed variable will check if the vehicle is moving or not */
   int vehicle_speed = 0;
@@ -464,7 +464,7 @@ void read_gps_coordinates_and_send(int index)
 }
 
 /*
- * Function: read_logged_data_and_send
+ * Function: Read_Logged_Data_And_Send
  * -----------------------------------
  *    Parses the SD card for the values of
  *    the sensors that need to be sent to 
@@ -476,7 +476,7 @@ void read_gps_coordinates_and_send(int index)
  *    
  *    Output: none
  */
-void read_logged_data_and_send(int index)
+void Read_Logged_Data_And_Send(int index)
 {
   /* speed variable will check if the vehicle is moving or not */
   int vehicle_speed = 0;
@@ -573,7 +573,7 @@ void read_logged_data_and_send(int index)
 }
 
 /*
- * Function: setup_sd_card
+ * Function: Setup_SD_Card
  * -----------------------
  *    Deletes old files and creates
  *    new files for logging the data
@@ -583,7 +583,7 @@ void read_logged_data_and_send(int index)
  *    
  *    Output: none
  */
-void setup_sd_card(void)
+void Setup_SD_Card(void)
 {
   /* Set SD ON, to log samples */
   SD.ON();
@@ -659,7 +659,7 @@ void setup_sd_card(void)
 }
 
 /*
- * Function: setup_app_sensors
+ * Function: Setup_App_Sensors
  * ---------------------------
  *    Calculates the logarithmic functions
  *    that are going to be used by non-linear
@@ -669,7 +669,7 @@ void setup_sd_card(void)
  *    
  *    Output: none
  */
-void setup_app_sensors(void)
+void Setup_App_Sensors(void)
 {
   /* Calculate the slope and the intersection of the logarithmic functions */
   COSensor.setCalibrationPoints(COres, COconcentrations, numPoints);           /* for CO  sensor */
@@ -687,7 +687,7 @@ void setup_app_sensors(void)
 }
 
 /*
- * Function: setup_gps_and_rtc
+ * Function: Setup_GPS_And_RTC
  * ---------------------------
  *    Starts the GPS and stores the
  *    Ephemeris information to the SD card
@@ -699,7 +699,7 @@ void setup_app_sensors(void)
  *    
  *    Output: none
  */
-void setup_gps_and_rtc(void)
+void Setup_GPS_And_RTC(void)
 {
   /* define status variable for GPS connection */
   bool status;
@@ -744,13 +744,13 @@ void setup_gps_and_rtc(void)
 
       USB.println(F("RTC was initialized"));
 
-      check_the_date(); /* update the date, we do not want to have the initialized values - maybe the app will start during the night */
+      Check_The_Date(); /* update the date, we do not want to have the initialized values - maybe the app will start during the night */
   }
 
 }
 
  /*
- * Function: check_the_date
+ * Function: Check_The_Date
  * ------------------------
  *    Checks if a day has passed since
  *    we started the application. Checks
@@ -761,7 +761,7 @@ void setup_gps_and_rtc(void)
  *    Output: TRUE    if a day has passed
  *            FALSE   if no day has passed
  */
-bool check_the_date(void)
+bool Check_The_Date(void)
 {
   bool day_flag_updated = false;
   int temp_hour = 0;
@@ -803,7 +803,7 @@ bool check_the_date(void)
 }
 
 /*
- * Function: run_application
+ * Function: Run_Application
  * -------------------------
  *    Starts the sensor board. Starts the sensors
  *    and wait 90 seconds for them to warm up.
@@ -815,7 +815,7 @@ bool check_the_date(void)
  *    
  *    Output: none
  */
-void run_application(void)
+void Run_Application(void)
 {
     /* enable sensors board */
     Gases.ON();
@@ -832,7 +832,7 @@ void run_application(void)
     #endif
 
     /* wait 90 seconds for the sensors to warm-up */
-    ninety_seconds_delay();
+    Ninety_Seconds_Delay();
 
     
     /**** READ SENSORS ****/
@@ -850,7 +850,7 @@ void run_application(void)
     Send_Data();
 
     /* if a day has passed, send the logged data to Meshlium */
-    if(check_the_date() == true)
+    if(Check_The_Date() == true)
     {
       /* power up SD card */
       SD.ON();
@@ -862,10 +862,10 @@ void run_application(void)
       /* GPS.loadEphems(); */
 
       /* send the samples to Meshlium */
-      read_logged_data_and_send(transmission_index);
+      Read_Logged_Data_And_Send(transmission_index);
 
       /* send the coordinates of the sent sample to Meshlium */
-      read_gps_coordinates_and_send(transmission_index);
+      Read_GPS_Coordinates_And_Send(transmission_index);
 
       /* close the GPS module */
       GPS.OFF();
@@ -909,10 +909,10 @@ void Send_Data(void)
     if (vehicle_speed < 5) // vehicle has slowed down or not moving
     {
       /* now it is a good time to check if there is a Zigbee Meshlium nearby and send it samples */
-      read_logged_data_and_send(transmission_index);
+      Read_Logged_Data_And_Send(transmission_index);
 
       /* send the coordinates of the sent sample to Meshlium */
-      read_gps_coordinates_and_send(transmission_index);
+      Read_GPS_Coordinates_And_Send(transmission_index);
     }
     else
     {
@@ -937,7 +937,7 @@ void Send_Data(void)
 }
 
  /*
- * Function: ninety_seconds_delay
+ * Function: Ninety_Seconds_Delay
  * ------------------------------
  *    waits 90 seconds for the gases
  *    sensors to warm up
@@ -946,7 +946,7 @@ void Send_Data(void)
  *    
  *    Output: none
  */
-void ninety_seconds_delay(void)
+void Ninety_Seconds_Delay(void)
 {
   uint8_t i = 0; /* 90 seconds counter */
 
@@ -957,7 +957,7 @@ void ninety_seconds_delay(void)
 }
 
 /*
- * Function: see_battery_status
+ * Function: See_Battery_Status
  * ----------------------------
  *    If we are in debug mode, print
  *    to the serial monitor the status
@@ -967,7 +967,7 @@ void ninety_seconds_delay(void)
  *    
  *    Output: none
  */
- void see_battery_status(void)
+ void See_Battery_Status(void)
  {
     bool chargeState;
     uint16_t chargeCurrent;

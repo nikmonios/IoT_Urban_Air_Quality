@@ -35,7 +35,7 @@
 /**** GLOBAL & DEFINES ****/
 float NO2PPM = 0;    /* Stores the NO2 value */
 float COPPM = 0;    /* Stores the CO value */
-float temperature = 0; /* Stores the temperature in ºC */
+float temperature = 0; /* Stores the temperature in ?C */
 float humidity = 0;     /* Stores the realitve humidity in %RH */
 float pressure = 0;    /* Stores the pressure in Pa */
 float CO2PPM = 0; /* stores the CO2 value */
@@ -60,13 +60,14 @@ float CO2voltages[] =        { POINT1_VOLT_CO2, POINT2_VOLT_CO2, POINT3_VOLT_CO2
 char node_ID[] = "node1_data";
 char node_gps[] = "node1_gps";
 
-/* 
- *  a unit that updates every 8 seconds
- *  when 360 seconds have passed (so it has increased 45 times [sample_time])
- *  take measurements. */
-uint16_t timer_unit = 0;
 
-uint16_t sample_time_day = 45;
+/* a unit that updates every 8 seconds */
+uint16_t timer_unit = 0; 
+
+/* 45 * 8 seconds = 360 seconds. Sampling period during the day */
+uint16_t sample_time_day = 45; 
+
+/* 450 * 8 seconds = 3600 seconds. Sampling period during the night */
 uint16_t sample_time_night = 450;
 
 /* Destination Meshlium MAC address */
@@ -94,7 +95,7 @@ char filename_gps[] = "GPSDATA.TXT";
 char toWrite[256];
 
 /* define variables to read stored frames */
-uint8_t frameSD[MAX_FRAME+1];
+uint8_t frameSD[MAX_FRAME + 1];
 uint16_t lengthSD;
 int32_t numLines;
 
