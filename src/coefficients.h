@@ -35,7 +35,7 @@
 /**** GLOBAL & DEFINES ****/
 float NO2PPM = 0;    /* Stores the NO2 value */
 float COPPM = 0;    /* Stores the CO value */
-float temperature = 0; /* Stores the temperature in ?C */
+float temperature = 0; /* Stores the temperature in ºC */
 float humidity = 0;     /* Stores the realitve humidity in %RH */
 float pressure = 0;    /* Stores the pressure in Pa */
 float CO2PPM = 0; /* stores the CO2 value */
@@ -91,6 +91,8 @@ char filename[]="FILE1.TXT";
 /* define file name for GPS coordinates logging */
 char filename_gps[] = "GPSDATA.TXT";
 
+char filename_bat[] = "BATLOG.TXT";
+
 /* buffer to write into Sd File */
 char toWrite[256];
 
@@ -120,5 +122,11 @@ int transmission_index = 0;
 
 /* variable to store whether we are operating during the day or during the night */
 int daytime_mode;
+
+/* from 8 AM, start taking samples every 6 minutes */
+int morning_limit = 8;
+
+/* from 8 PM, start taking samples every one hour */
+int night_limit = 20;
 
 #endif
