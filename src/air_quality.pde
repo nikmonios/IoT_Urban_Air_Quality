@@ -17,7 +17,7 @@
 #include <WaspGPS.h>
 #include "coefficients.h"
 
-#define PDEBUG 1   /* enable serial print for debug reasons */
+/*#define PDEBUG 1*/  /* enable serial print for debug reasons */
 /*#define MODE2  1*/    /* mode 2, when enabled, will read more sensors */
 
 void setup()
@@ -127,7 +127,7 @@ void Read_Sensors(void)
   GPS.ON();
 
   /* load ephemeris previously stored in SD */
-  GPS.loadEphems();
+  //GPS.loadEphems();
   
   status = GPS.waitForSignal(TIMEOUT); /* wait some time for the GPS to connect */
 
@@ -721,7 +721,7 @@ void Setup_GPS_And_RTC(void)
   if( status == true )
   {        
       /* store ephemeris in "EPHEM.TXT" */
-      GPS.saveEphems();
+      //GPS.saveEphems();
 
       #ifdef PDEBUG
       USB.println(F("Ephemeries were saved in a file"));
@@ -782,7 +782,7 @@ bool Check_The_Date(void)
   temp_hour = (int)RTC.hour; /* check what time it is */
 
   /* update the daytime */
-  if(temp_hour <= 6 || temp_hour >= 19)
+  if(temp_hour <= morning_limit || temp_hour >= night_limit)
   {
     daytime = "NIGHT"; /* between 19:00 and 6:00, it is night */
   }
