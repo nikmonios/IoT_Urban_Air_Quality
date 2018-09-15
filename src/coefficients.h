@@ -117,8 +117,9 @@ char* daytime = "DAY"; /* initialize in day */
 /* temporary day of week variable, to see if a day has passed */
 char* temp_day = "Mon";
 
-/* an index that shows which sample inside the .txt file is next to be sent */
-int transmission_index = 0;
+/* Indices that shows which sample inside the .txt file is next to be sent, both data and gps */
+int transmission_index_data = 0;
+int transmission_index_gps  = 0;
 
 /* variable to store whether we are operating during the day or during the night */
 int daytime_mode;

@@ -431,7 +431,7 @@ void Read_GPS_Coordinates_And_Send(int index)
       // check TX flag
       if( error == 0 )
       {
-        transmission_index++; /* update global variable */
+        transmission_index_gps++; /* update gps data index */
         USB.println(F("send GPS ok"));
       }
       else 
@@ -541,6 +541,7 @@ void Read_Logged_Data_And_Send(int index)
       // check TX flag
       if( error == 0 )
       {
+		transmission_index_data++; /* update sensor data index */
         USB.println(F("send ok"));
       }
       else 
