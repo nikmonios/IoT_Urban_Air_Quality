@@ -783,13 +783,13 @@ bool Check_The_Date(void)
   temp_hour = (int)RTC.hour; /* check what time it is */
 
   /* update the daytime */
-  if(temp_hour <= morning_limit || temp_hour >= night_limit)
+  if(temp_hour >= morning_limit && temp_hour <= night_limit)
   {
-    daytime = "NIGHT"; /* between 19:00 and 6:00, it is night */
+    daytime = "DAY"; /* between 19:00 and 6:00, it is night */
   }
   else
   {
-    daytime = "DAY"; /* else, it is day */
+    daytime = "NIGHT"; /* else, it is day */
   }
 
   /* if one day has passed, return TRUE */
@@ -863,10 +863,10 @@ void Run_Application(void)
       /* GPS.loadEphems(); */
 
       /* send the samples to Meshlium */
-      Read_Logged_Data_And_Send(transmission_index);
+      Read_Logged_Data_And_Send(transmission_index_data);
 
       /* send the coordinates of the sent sample to Meshlium */
-      Read_GPS_Coordinates_And_Send(transmission_index);
+      Read_GPS_Coordinates_And_Send(transmission_index_gps);
 
       /* close the GPS module */
       GPS.OFF();
@@ -910,10 +910,10 @@ void Send_Data(void)
     if (vehicle_speed < 5) // vehicle has slowed down or not moving
     {
       /* now it is a good time to check if there is a Zigbee Meshlium nearby and send it samples */
-      Read_Logged_Data_And_Send(transmission_index);
+      Read_Logged_Data_And_Send(transmission_index_data);
 
       /* send the coordinates of the sent sample to Meshlium */
-      Read_GPS_Coordinates_And_Send(transmission_index);
+      Read_GPS_Coordinates_And_Send(transmission_index_gps);
     }
     else
     {
